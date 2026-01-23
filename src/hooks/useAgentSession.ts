@@ -18,6 +18,7 @@ import { toAgentConfig } from "../shared/settings-utils";
 import {
 	getAgentInstallCommand,
 } from "../shared/agent-installer";
+import { detectNodePath } from "../shared/path-detector";
 import { spawn } from "child_process";
 
 // ============================================================================
@@ -66,8 +67,19 @@ async function autoInstallAgent(
 		return { success: false, command: "" };
 	}
 
+	// Auto-detect Node.js path if not configured
+	let resolvedNodePath = nodePath;
+	if (!resolvedNodePath.trim()) {
+		const detected = detectNodePath();
+		if (detected?.path) {
+			resolvedNodePath = detected.path;
+		}
+	}
+
 	// Derive npm path from node path
-	const nodeDir = nodePath.trim() ? nodePath.trim().replace(/\/node$/, "") : "";
+	const nodeDir = resolvedNodePath.trim()
+		? resolvedNodePath.trim().replace(/\/node$/, "")
+		: "";
 	const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
 
 	// Build installation command
@@ -511,6 +523,14 @@ export function useAgentSession(
 				settings.autoInstallAgents &&
 				(!agentSettings.command || agentSettings.command.trim().length === 0)
 			) {
+				// Auto-detect Node.js path if not configured
+				if (!settings.nodePath.trim()) {
+					const detected = detectNodePath();
+					if (detected?.path) {
+						settings.nodePath = detected.path;
+					}
+				}
+
 				const result = await autoInstallAgent(
 					activeAgentId,
 					settings.nodePath,

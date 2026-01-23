@@ -579,6 +579,19 @@ function ChatComponent({
 		void agentSession.createSession();
 	}, [session.agentId, agentSession.createSession]);
 
+	// Reload session when critical settings change (apiKey, baseUrl, model)
+	useEffect(() => {
+		if (session.state === "ready") {
+			logger.log("[Debug] Settings changed, reloading session...");
+			void agentSession.createSession();
+		}
+	}, [
+		settings.apiKey,
+		settings.baseUrl,
+		settings.model,
+		agentSession.createSession,
+	]);
+
 	// Refs for cleanup (to access latest values in cleanup function)
 	const messagesRef = useRef(messages);
 	const sessionRef = useRef(session);
