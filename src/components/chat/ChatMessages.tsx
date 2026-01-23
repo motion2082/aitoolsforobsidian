@@ -86,6 +86,17 @@ export function ChatMessages({
 	const [isAtBottom, setIsAtBottom] = useState(true);
 
 	/**
+	 * Handle install agent click with proper async handling.
+	 */
+	const handleInstallClick = useCallback(() => {
+		if (!errorInfo?.agentId || !onInstallAgent) return;
+		setIsInstalling(true);
+		void onInstallAgent(errorInfo.agentId).finally(() => {
+			setIsInstalling(false);
+		});
+	}, [errorInfo?.agentId, onInstallAgent]);
+
+	/**
 	 * Check if the scroll position is near the bottom.
 	 */
 	const checkIfAtBottom = useCallback(() => {
@@ -155,14 +166,7 @@ export function ChatMessages({
 							errorInfo.agentId &&
 							onInstallAgent && (
 								<button
-									onClick={async () => {
-										setIsInstalling(true);
-										try {
-											await onInstallAgent(errorInfo.agentId!);
-										} finally {
-											setIsInstalling(false);
-										}
-									}}
+									onClick={handleInstallClick}
 									disabled={isInstalling}
 									className="obsidianaitools-chat-error-button obsidianaitools-chat-error-install"
 								>

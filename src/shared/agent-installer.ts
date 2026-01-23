@@ -58,11 +58,9 @@ export function installAgent(
 		return null;
 	}
 
-	// Use the node path from settings, or just 'node' to use system node
-	const nodeExec = nodePath.trim() || "node";
-	const npmExec = nodePath.trim()
-		? nodePath.trim().replace(/node$/, "npm")
-		: "npm";
+	// Use the node path from settings to derive npm path
+	const nodeDir = nodePath.trim() ? nodePath.trim().replace(/\/node$/, "") : "";
+	const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
 
 	// Build command based on platform
 	let command: string;
@@ -88,27 +86,21 @@ export function installAgent(
 		env: {
 			...process.env,
 			// Ensure npm uses the correct node
-			...(nodePath.trim()
+			...(nodeDir
 				? {
-						PATH: `${nodePath.replace(/\/node$/, "")}:${
-							process.env.PATH || ""
-						}`,
+						PATH: `${nodeDir}:${process.env.PATH || ""}`,
 				  }
 				: {}),
 		},
 	});
 
-	let output = "";
-
-	childProcess.stdout?.on("data", (data) => {
-		const text = data.toString();
-		output += text;
+	childProcess.stdout?.on("data", (data: unknown) => {
+		const text = typeof data === "string" ? data : String(data);
 		onOutput?.(text);
 	});
 
-	childProcess.stderr?.on("data", (data) => {
-		const text = data.toString();
-		output += text;
+	childProcess.stderr?.on("data", (data: unknown) => {
+		const text = typeof data === "string" ? data : String(data);
 		onOutput?.(text);
 	});
 

@@ -12,9 +12,6 @@ import type { ISettingsAccess } from "../domain/ports/settings-access.port";
 import type { AgentClientPluginSettings } from "../plugin";
 import type {
 	BaseAgentSettings,
-	ClaudeAgentSettings,
-	GeminiAgentSettings,
-	CodexAgentSettings,
 } from "../domain/models/agent-config";
 import { toAgentConfig } from "../shared/settings-utils";
 
