@@ -1,35 +1,90 @@
-name: Release Obsidian plugin
+name: Release
 
 on:
-    push:
-        tags:
-            - "*"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-        steps:
-            - uses: actions/checkout@v3
+  validate:
+    name: Validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Use Node.js
-              uses: actions/setup-node@v3
-              with:
-                  node-version: "18.x"
+      - name: Validate tag matches manifest version
+        id: validate
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          manifest_version=$(grep -o '"version": *"[^"]*"' manifest.json | sed 's/.*: *"\([^"]*\)"/\1/')
 
-            - name: Build plugin
-              run: |
-                  npm install
-                  npm run build
+          if [ "$tag" != "v$manifest_version" ]; then
+            echo "Tag '$tag' does not match manifest version 'v$manifest_version'"
+            echo "Tag must match format: v<version> where <version> is from manifest.json"
+            exit 1
+          fi
 
-            - name: Create release
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  tag="${GITHUB_REF#refs/tags/}"
+          echo "version=$manifest_version" >> "$GITHUB_OUTPUT"
+          echo "Validated: tag '$tag' matches manifest version '$manifest_version'"
 
-                  gh release create "$tag" \
-                    --title="$tag" \
-                    --draft \
-                    main.js manifest.json styles.css
+  build:
+    name: Build and release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npx eslint src/
+
+      - name: Build
+        run: npm run build
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="${{ needs.validate.outputs.version }}"
+
+          # Create release notes from commits since last tag
+          previous_tag=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -n "$previous_tag" ]; then
+            changelog=$(git log "$previous_tag"..HEAD --pretty=format:"- %s" 2>/dev/null | head -20)
+          else
+            changelog=$(git log --pretty=format:"- %s" | head -20)
+          fi
+
+          # Create release
+          gh release create "$tag" \
+            --title="$tag" \
+            --notes "$(cat <<EOF
+## Changes
+
+$changelog
+
+## Files
+
+- main.js
+- manifest.json
+- styles.css
+EOF
+            )" \
+            main.js manifest.json styles.css
+
+          echo "Release '$tag' created successfully"
