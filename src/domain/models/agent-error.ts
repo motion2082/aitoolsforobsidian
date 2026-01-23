@@ -96,4 +96,7 @@ export interface AgentError extends ErrorInfo {
 
 	/** Original error object for debugging (not shown to users) */
 	originalError?: unknown;
+
+	/** Whether this error can be fixed by auto-installing the agent */
+	canAutoInstall?: boolean;
 }

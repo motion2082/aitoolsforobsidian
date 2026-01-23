@@ -34,9 +34,9 @@ export type { AgentEnvVar, CustomAgentSettings };
 export type SendMessageShortcut = "enter" | "cmd-enter";
 
 export interface AgentClientPluginSettings {
-	gemini: GeminiAgentSettings;
-	claude: ClaudeAgentSettings;
-	codex: CodexAgentSettings;
+	gemini: Omit<GeminiAgentSettings, "apiKey">;
+	claude: Omit<ClaudeAgentSettings, "apiKey">;
+	codex: Omit<CodexAgentSettings, "apiKey">;
 	customAgents: CustomAgentSettings[];
 	activeAgentId: string;
 	autoAllowPermissions: boolean;
@@ -69,13 +69,18 @@ export interface AgentClientPluginSettings {
 	savedSessions: SavedSessionInfo[];
 	// Onboarding state
 	hasCompletedOnboarding: boolean;
+	// Auto-install missing agents
+	autoInstallAgents: boolean;
+	// Global API configuration
+	apiKey: string;
+	baseUrl: string;
+	model: string;
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	claude: {
 		id: "claude-code-acp",
 		displayName: "Claude Code",
-		apiKey: "",
 		command: "",
 		args: [],
 		env: [],
@@ -83,7 +88,6 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	codex: {
 		id: "codex-acp",
 		displayName: "Codex",
-		apiKey: "",
 		command: "",
 		args: [],
 		env: [],
@@ -91,7 +95,6 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	gemini: {
 		id: "gemini-cli",
 		displayName: "Gemini CLI",
-		apiKey: "",
 		command: "",
 		args: ["--experimental-acp"],
 		env: [],
@@ -123,6 +126,10 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	},
 	savedSessions: [],
 	hasCompletedOnboarding: false,
+	autoInstallAgents: true,
+	apiKey: "",
+	baseUrl: "https://chat.ultimateai.org",
+	model: "MiniMax-M2.1",
 };
 
 export default class AgentClientPlugin extends Plugin {
@@ -403,10 +410,6 @@ export default class AgentClientPlugin extends Plugin {
 					claudeFromRaw.displayName.trim().length > 0
 						? claudeFromRaw.displayName.trim()
 						: DEFAULT_SETTINGS.claude.displayName,
-				apiKey:
-					typeof claudeFromRaw.apiKey === "string"
-						? claudeFromRaw.apiKey
-						: DEFAULT_SETTINGS.claude.apiKey,
 				command:
 					typeof claudeFromRaw.command === "string" &&
 					claudeFromRaw.command.trim().length > 0
@@ -427,10 +430,6 @@ export default class AgentClientPlugin extends Plugin {
 					codexFromRaw.displayName.trim().length > 0
 						? codexFromRaw.displayName.trim()
 						: DEFAULT_SETTINGS.codex.displayName,
-				apiKey:
-					typeof codexFromRaw.apiKey === "string"
-						? codexFromRaw.apiKey
-						: DEFAULT_SETTINGS.codex.apiKey,
 				command:
 					typeof codexFromRaw.command === "string" &&
 					codexFromRaw.command.trim().length > 0
@@ -446,10 +445,6 @@ export default class AgentClientPlugin extends Plugin {
 					geminiFromRaw.displayName.trim().length > 0
 						? geminiFromRaw.displayName.trim()
 						: DEFAULT_SETTINGS.gemini.displayName,
-				apiKey:
-					typeof geminiFromRaw.apiKey === "string"
-						? geminiFromRaw.apiKey
-						: DEFAULT_SETTINGS.gemini.apiKey,
 				command:
 					typeof geminiFromRaw.command === "string" &&
 					geminiFromRaw.command.trim().length > 0
@@ -586,6 +581,14 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.hasCompletedOnboarding === "boolean"
 					? rawSettings.hasCompletedOnboarding
 					: DEFAULT_SETTINGS.hasCompletedOnboarding,
+			autoInstallAgents:
+				typeof rawSettings.autoInstallAgents === "boolean"
+					? rawSettings.autoInstallAgents
+					: DEFAULT_SETTINGS.autoInstallAgents,
+			// Global API configuration
+			apiKey: DEFAULT_SETTINGS.apiKey,
+			baseUrl: DEFAULT_SETTINGS.baseUrl,
+			model: DEFAULT_SETTINGS.model,
 		};
 
 		this.ensureActiveAgentId();

@@ -538,6 +538,34 @@ function ChatComponent({
 		chat.clearError();
 	}, [chat]);
 
+	const handleInstallAgent = useCallback(
+		async (agentId: string) => {
+			logger.log("Installing agent:", agentId);
+			const adapter = acpClientRef.current;
+			if (adapter && "installCurrentAgent" in adapter) {
+				const result = await (
+					adapter as {
+						installCurrentAgent: (
+							onProgress?: (output: string) => void,
+						) => Promise<boolean>;
+					}
+				).installCurrentAgent((output) => {
+					logger.log("Install output:", output);
+				});
+
+				if (result) {
+					// Installation succeeded, clear error and retry session
+					chat.clearError();
+					await agentSession.createSession();
+				} else {
+					// Installation failed, keep error displayed
+					logger.error("Installation failed");
+				}
+			}
+		},
+		[logger, acpClientRef, chat, agentSession],
+	);
+
 	const handleRestoredMessageConsumed = useCallback(() => {
 		setRestoredMessage(null);
 	}, []);
@@ -820,6 +848,7 @@ function ChatComponent({
 				onClearError={handleClearError}
 				isAgentConfigured={!!session.agentId}
 				onOpenSettings={handleOpenSettings}
+				onInstallAgent={handleInstallAgent}
 			/>
 
 			<ChatInput

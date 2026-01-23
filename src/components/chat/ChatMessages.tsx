@@ -14,6 +14,8 @@ export interface ErrorInfo {
 	title: string;
 	message: string;
 	suggestion?: string;
+	canAutoInstall?: boolean;
+	agentId?: string;
 }
 
 /**
@@ -49,6 +51,8 @@ export interface ChatMessagesProps {
 	isAgentConfigured: boolean;
 	/** Callback to open settings */
 	onOpenSettings?: () => void;
+	/** Callback to install agent (when auto-install is available) */
+	onInstallAgent?: (agentId: string) => Promise<void>;
 }
 
 /**
@@ -75,7 +79,9 @@ export function ChatMessages({
 	onClearError,
 	isAgentConfigured,
 	onOpenSettings,
+	onInstallAgent,
 }: ChatMessagesProps) {
+	const [isInstalling, setIsInstalling] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -144,12 +150,32 @@ export function ChatMessages({
 							💡 {errorInfo.suggestion}
 						</p>
 					)}
-					<button
-						onClick={onClearError}
-						className="obsidianaitools-chat-error-button"
-					>
-						OK
-					</button>
+					<div className="obsidianaitools-chat-error-buttons">
+						{errorInfo.canAutoInstall &&
+							errorInfo.agentId &&
+							onInstallAgent && (
+								<button
+									onClick={async () => {
+										setIsInstalling(true);
+										try {
+											await onInstallAgent(errorInfo.agentId!);
+										} finally {
+											setIsInstalling(false);
+										}
+									}}
+									disabled={isInstalling}
+									className="obsidianaitools-chat-error-button obsidianaitools-chat-error-install"
+								>
+									{isInstalling ? "Installing..." : "Install"}
+								</button>
+							)}
+						<button
+							onClick={onClearError}
+							className="obsidianaitools-chat-error-button"
+						>
+							OK
+						</button>
+					</div>
 				</div>
 			) : messages.length === 0 ? (
 				<div className="obsidianaitools-chat-empty-state">

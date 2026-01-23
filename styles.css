@@ -470,6 +470,27 @@ If your plugin does not need CSS, delete this file.
 	font-size: 14px;
 }
 
+.obsidianaitools-chat-error-buttons {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+}
+
+.obsidianaitools-chat-error-install {
+	background-color: var(--text-accent) !important;
+	color: var(--text-on-accent) !important;
+	border: none !important;
+}
+
+.obsidianaitools-chat-error-install:hover {
+	background-color: var(--text-accent-hover) !important;
+}
+
+.obsidianaitools-chat-error-install:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 /* Empty state */
 .obsidianaitools-chat-empty-state {
 	color: var(--text-muted);

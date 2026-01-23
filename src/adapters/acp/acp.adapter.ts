@@ -37,6 +37,12 @@ import {
 import { resolveCommandDirectory } from "../../shared/path-utils";
 import { getEnhancedWindowsEnv } from "../../shared/windows-env";
 import { escapeShellArgWindows } from "../../shared/shell-utils";
+import {
+	installAgent,
+	getAgentInstallCommand,
+	getAgentDisplayName,
+	isKnownAgent,
+} from "../../shared/agent-installer";
 
 /**
  * Extended ACP Client interface for UI layer.
@@ -357,16 +363,26 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				const commandName =
 					command.split("/").pop()?.split("\\").pop() || command;
 
+				// Check if this is a known agent that can be auto-installed
+				const canAutoInstall =
+					isKnownAgent(config.id) &&
+					this.plugin.settings.autoInstallAgents;
+
 				const agentError: AgentError = {
 					id: crypto.randomUUID(),
 					category: "configuration",
 					severity: "error",
 					title: "Command Not Found",
-					message: `The command "${command}" could not be found. Please check the path configuration for ${agentLabel}.`,
-					suggestion: this.getCommandNotFoundSuggestion(command, commandName),
+					message: canAutoInstall
+						? `${getAgentDisplayName(config.id)} is not installed. Click "Install" to install it automatically.`
+						: `The command "${command}" could not be found. Please check the path configuration for ${agentLabel}.`,
+					suggestion: canAutoInstall
+						? "Click 'Install' to install via npm, or configure the path manually in settings."
+						: this.getCommandNotFoundSuggestion(command, commandName),
 					occurredAt: new Date(),
 					agentId: config.id,
 					code: code,
+					canAutoInstall,
 				};
 
 				this.errorCallback?.(agentError);
@@ -764,6 +780,70 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 		this.logger.log("[AcpAdapter] Disconnected");
 		return Promise.resolve();
+	}
+
+	/**
+	 * Install the current agent using npm.
+	 * Returns a promise that resolves when installation is complete.
+	 */
+	installCurrentAgent(
+		onProgress?: (output: string) => void,
+	): Promise<boolean> {
+		if (!this.currentConfig) {
+			return Promise.resolve(false);
+		}
+
+		const agentId = this.currentConfig.id;
+
+		if (!isKnownAgent(agentId)) {
+			this.logger.warn(
+				`[AcpAdapter] Cannot auto-install unknown agent: ${agentId}`,
+			);
+			return Promise.resolve(false);
+		}
+
+		const installCommand = getAgentInstallCommand(agentId);
+		if (!installCommand) {
+			return Promise.resolve(false);
+		}
+
+		this.logger.log(
+			`[AcpAdapter] Installing ${getAgentDisplayName(agentId)}...`,
+		);
+
+		const childProcess = installAgent(
+			agentId,
+			this.plugin.settings.nodePath,
+			onProgress,
+		);
+
+		if (!childProcess) {
+			return Promise.resolve(false);
+		}
+
+		return new Promise((resolve) => {
+			childProcess.on("close", (code) => {
+				if (code === 0) {
+					this.logger.log(
+						`[AcpAdapter] Successfully installed ${getAgentDisplayName(agentId)}`,
+					);
+					resolve(true);
+				} else {
+					this.logger.error(
+						`[AcpAdapter] Failed to install ${getAgentDisplayName(agentId)} (exit code: ${code})`,
+					);
+					resolve(false);
+				}
+			});
+
+			childProcess.on("error", (error) => {
+				this.logger.error(
+					`[AcpAdapter] Installation error for ${getAgentDisplayName(agentId)}:`,
+					error,
+				);
+				resolve(false);
+			});
+		});
 	}
 
 	/**

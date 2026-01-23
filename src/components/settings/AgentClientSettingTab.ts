@@ -107,6 +107,56 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Auto-install missing agents")
+			.setDesc(
+				"Automatically install Claude Code, Gemini CLI, and Codex when they're not found. Requires Node.js and npm.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoInstallAgents)
+					.onChange(async (value) => {
+						this.plugin.settings.autoInstallAgents = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		// ─────────────────────────────────────────────────────────────────────
+		// API Configuration (global for all agents)
+		// ─────────────────────────────────────────────────────────────────────
+
+		new Setting(containerEl).setName("API Configuration").setHeading();
+
+		new Setting(containerEl)
+			.setName("API Key")
+			.setDesc(
+				"API key used by all agents. For Claude, this is used as ANTHROPIC_AUTH_TOKEN. For Gemini, this is used as GEMINI_API_KEY.",
+			)
+			.addText((text) => {
+				text.setPlaceholder("Enter your API key")
+					.setValue(this.plugin.settings.apiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.apiKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				// Make the input a password field
+				text.inputEl.type = "password";
+			});
+
+		new Setting(containerEl)
+			.setName("Base URL")
+			.setDesc(
+				"Base URL for all API requests. Default: https://chat.ultimateai.org",
+			)
+			.addText((text) => {
+				text.setPlaceholder("https://chat.ultimateai.org")
+					.setValue(this.plugin.settings.baseUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.baseUrl = value.trim();
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
 			.setName("Send message shortcut")
 			.setDesc(
 				"Choose the keyboard shortcut to send messages. Note: If using Cmd/Ctrl+Enter, you may need to remove any hotkeys assigned to Cmd/Ctrl+Enter (Settings → Hotkeys).",
@@ -615,21 +665,6 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			.setHeading();
 
 		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"Gemini API key. Required if not logging in with a Google account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your Gemini API key")
-					.setValue(gemini.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.gemini.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
-
-		new Setting(sectionEl)
 			.setName("Path")
 			.setDesc("Absolute path to the Gemini CLI executable.")
 			.addText((text) => {
@@ -713,21 +748,6 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(sectionEl)
 			.setName(claude.displayName || "Claude Code (ACP)")
 			.setHeading();
-
-		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"Anthropic API key. Required if not logging in with an Anthropic account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your Anthropic API key")
-					.setValue(claude.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.claude.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
 
 		new Setting(sectionEl)
 			.setName("Path")
@@ -815,21 +835,6 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(sectionEl)
 			.setName(codex.displayName || "Codex")
 			.setHeading();
-
-		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"OpenAI API key. Required if not logging in with an OpenAI account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your OpenAI API key")
-					.setValue(codex.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.codex.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
 
 		new Setting(sectionEl)
 			.setName("Path")

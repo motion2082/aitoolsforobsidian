@@ -40,6 +40,8 @@ export interface SessionErrorInfo {
 	title: string;
 	message: string;
 	suggestion?: string;
+	canAutoInstall?: boolean;
+	agentId?: string;
 }
 
 /**
@@ -221,6 +223,7 @@ function findAgentSettings(
 
 /**
  * Build AgentConfig with API key injection for known agents.
+ * Uses global API key, base URL, and model for all agents.
  */
 function buildAgentConfigWithApiKey(
 	settings: AgentClientPluginSettings,
@@ -229,41 +232,45 @@ function buildAgentConfigWithApiKey(
 	workingDirectory: string,
 ) {
 	const baseConfig = toAgentConfig(agentSettings, workingDirectory);
+	const env: Record<string, string> = {
+		...baseConfig.env,
+	};
 
-	// Add API keys to environment for Claude, Codex, and Gemini
-	if (agentId === settings.claude.id) {
-		const claudeSettings = agentSettings as ClaudeAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				ANTHROPIC_API_KEY: claudeSettings.apiKey,
-			},
-		};
-	}
-	if (agentId === settings.codex.id) {
-		const codexSettings = agentSettings as CodexAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				OPENAI_API_KEY: codexSettings.apiKey,
-			},
-		};
-	}
-	if (agentId === settings.gemini.id) {
-		const geminiSettings = agentSettings as GeminiAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				GOOGLE_API_KEY: geminiSettings.apiKey,
-			},
-		};
+	// Use global API key for all agents
+	if (settings.apiKey) {
+		// Claude: use ANTHROPIC_AUTH_TOKEN (not ANTHROPIC_API_KEY)
+		if (agentId === settings.claude.id) {
+			env.ANTHROPIC_AUTH_TOKEN = settings.apiKey;
+			if (settings.baseUrl) {
+				env.ANTHROPIC_BASE_URL = settings.baseUrl;
+			}
+		}
+		// Gemini: use GEMINI_API_KEY
+		if (agentId === settings.gemini.id) {
+			env.GEMINI_API_KEY = settings.apiKey;
+			if (settings.baseUrl) {
+				env.GOOGLE_GEMINI_BASE_URL = settings.baseUrl;
+			}
+			if (settings.model) {
+				env.GEMINI_MODEL = settings.model;
+			}
+		}
+		// Codex: use OPENAI_API_KEY
+		if (agentId === settings.codex.id) {
+			env.OPENAI_API_KEY = settings.apiKey;
+			if (settings.baseUrl) {
+				env.OPENAI_BASE_URL = settings.baseUrl;
+			}
+			if (settings.model) {
+				env.OPENAI_MODEL = settings.model;
+			}
+		}
 	}
 
-	// Custom agents - no API key injection
-	return baseConfig;
+	return {
+		...baseConfig,
+		env,
+	};
 }
 
 // ============================================================================
@@ -842,6 +849,8 @@ export function useAgentSession(
 				title: error.title || "Agent Error",
 				message: error.message || "An error occurred",
 				suggestion: error.suggestion,
+				canAutoInstall: error.canAutoInstall,
+				agentId: error.agentId,
 			});
 		});
 	}, [agentClient]);
