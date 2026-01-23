@@ -45,6 +45,10 @@ export interface ChatMessagesProps {
 	) => Promise<void>;
 	/** Callback to clear the error */
 	onClearError: () => void;
+	/** Whether the agent is properly configured */
+	isAgentConfigured: boolean;
+	/** Callback to open settings */
+	onOpenSettings?: () => void;
 }
 
 /**
@@ -69,6 +73,8 @@ export function ChatMessages({
 	acpClient,
 	onApprovePermission,
 	onClearError,
+	isAgentConfigured,
+	onOpenSettings,
 }: ChatMessagesProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [isAtBottom, setIsAtBottom] = useState(true);
@@ -147,11 +153,52 @@ export function ChatMessages({
 				</div>
 			) : messages.length === 0 ? (
 				<div className="obsidianaitools-chat-empty-state">
-					{isRestoringSession
-						? "Restoring session..."
-						: !isSessionReady
-							? `Connecting to ${agentLabel}...`
-							: `Start a conversation with ${agentLabel}...`}
+					{isRestoringSession ? (
+						"Restoring session..."
+					) : !isSessionReady ? (
+						!isAgentConfigured ? (
+							<div className="obsidianaitools-empty-state-setup">
+								<div className="obsidianaitools-empty-state-icon">
+									⚙️
+								</div>
+								<h3>Setup Required</h3>
+								<p>
+									To start chatting, configure an AI agent in
+									settings.
+								</p>
+								<div className="obsidianaitools-empty-state-actions">
+									<button
+										className="obsidianaitools-empty-state-button"
+										onClick={onOpenSettings}
+									>
+										Open Settings
+									</button>
+									<a
+										href="https://ultimateai-org.github.io/aitoolsforobsidian/getting-started/"
+										target="_blank"
+										className="obsidianaitools-empty-state-link"
+									>
+										View Setup Guide →
+									</a>
+								</div>
+							</div>
+						) : (
+							`Connecting to ${agentLabel}...`
+						)
+					) : (
+						<div className="obsidianaitools-empty-state-ready">
+							<div className="obsidianaitools-empty-state-icon">💬</div>
+							<p>Start a conversation with {agentLabel}...</p>
+							<div className="obsidianaitools-empty-state-hints">
+								<span className="obsidianaitools-hint">
+									Tip: Type @ to mention notes
+								</span>
+								<span className="obsidianaitools-hint">
+									Type / for commands
+								</span>
+							</div>
+						</div>
+					)}
 				</div>
 			) : (
 				<>

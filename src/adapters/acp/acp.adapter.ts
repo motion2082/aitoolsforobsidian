@@ -354,13 +354,16 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			if (code === 127) {
 				this.logger.error(`[AcpAdapter] Command not found: ${command}`);
 
+				const commandName =
+					command.split("/").pop()?.split("\\").pop() || command;
+
 				const agentError: AgentError = {
 					id: crypto.randomUUID(),
 					category: "configuration",
 					severity: "error",
 					title: "Command Not Found",
 					message: `The command "${command}" could not be found. Please check the path configuration for ${agentLabel}.`,
-					suggestion: this.getCommandNotFoundSuggestion(command),
+					suggestion: this.getCommandNotFoundSuggestion(command, commandName),
 					occurredAt: new Date(),
 					agentId: config.id,
 					code: code,
@@ -904,32 +907,66 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		command: string,
 		agentLabel: string,
 	): { title: string; message: string; suggestion: string } {
+		const commandName =
+			command.split("/").pop()?.split("\\").pop() || command;
+
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
 			return {
 				title: "Command Not Found",
-				message: `The command "${command}" could not be found. Please check the path configuration for ${agentLabel}.`,
-				suggestion: this.getCommandNotFoundSuggestion(command),
+				message: `Could not find "${commandName}". This could mean:`,
+				suggestion: this.getCommandNotFoundSuggestion(command, commandName),
+			};
+		}
+
+		// Handle common exit codes
+		if ("code" in error && (error as { code?: number }).code === 127) {
+			return {
+				title: "Executable Not Found",
+				message: `"${commandName}" was not found at the specified path.`,
+				suggestion: this.getCommandNotFoundSuggestion(command, commandName),
 			};
 		}
 
 		return {
 			title: "Agent Startup Error",
 			message: `Failed to start ${agentLabel}: ${error.message}`,
-			suggestion: "Please check the agent configuration in settings.",
+			suggestion: "Please check the agent path and Node.js configuration in settings.",
 		};
 	}
 
 	/**
-	 * Get platform-specific suggestions for command not found errors.
+	 * Get user-friendly suggestions for command not found errors.
 	 */
-	private getCommandNotFoundSuggestion(command: string): string {
-		const commandName =
-			command.split("/").pop()?.split("\\").pop() || "command";
+	private getCommandNotFoundSuggestion(
+		command: string,
+		commandName: string,
+	): string {
+		// Build helpful suggestion based on the command
+		const installCommands: Record<string, string> = {
+			"claude-code-acp":
+				"npm install -g @zed-industries/claude-code-acp",
+			"codex-acp": "npm install -g @zed-industries/codex-acp",
+			gemini: "npm install -g @google/gemini-cli",
+		};
+
+		const installHint = installCommands[commandName]
+			? `Install with: ${installCommands[commandName]}`
+			: "Make sure the agent is properly installed.";
 
 		if (Platform.isWin) {
-			return `1. Verify the agent path: Use "where ${commandName}" in Command Prompt to find the correct path. 2. If the agent requires Node.js, also check that Node.js path is correctly set in General Settings (use "where node" to find it).`;
+			return `${installHint}
+
+To fix:
+1. Open Settings → Agent Client → Path
+2. Enter the full path to ${commandName}
+3. Or click "Auto-detect" to find it automatically`;
 		} else {
-			return `1. Verify the agent path: Use "which ${commandName}" in Terminal to find the correct path. 2. If the agent requires Node.js, also check that Node.js path is correctly set in General Settings (use "which node" to find it).`;
+			return `${installHint}
+
+To fix:
+1. Run "which ${commandName}" to find the correct path
+2. Or run "npm list -g --depth=0" to check if it's installed
+3. Update the path in Settings → Agent Client → Path`;
 		}
 	}
 

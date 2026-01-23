@@ -6,6 +6,7 @@ import {
 	type SettingsStore,
 } from "./adapters/obsidian/settings-store.adapter";
 import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
+import { OnboardingModal } from "./components/OnboardingModal";
 import { AcpAdapter } from "./adapters/acp/acp.adapter";
 import {
 	sanitizeArgs,
@@ -66,6 +67,8 @@ export interface AgentClientPluginSettings {
 	};
 	// Locally saved session metadata (for agents without session/list support)
 	savedSessions: SavedSessionInfo[];
+	// Onboarding state
+	hasCompletedOnboarding: boolean;
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
@@ -119,6 +122,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		maxSelectionLength: 10000,
 	},
 	savedSessions: [],
+	hasCompletedOnboarding: false,
 };
 
 export default class AgentClientPlugin extends Plugin {
@@ -132,6 +136,16 @@ export default class AgentClientPlugin extends Plugin {
 
 		// Initialize settings store
 		this.settingsStore = createSettingsStore(this.settings, this);
+
+		// Show onboarding modal on first install
+		if (!this.settings.hasCompletedOnboarding) {
+			// Use setTimeout to ensure UI is ready
+			setTimeout(() => {
+				new OnboardingModal(this.app, this).open();
+				this.settings.hasCompletedOnboarding = true;
+				void this.saveSettings();
+			}, 100);
+		}
 
 		this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
 
@@ -568,6 +582,10 @@ export default class AgentClientPlugin extends Plugin {
 			savedSessions: Array.isArray(rawSettings.savedSessions)
 				? (rawSettings.savedSessions as SavedSessionInfo[])
 				: DEFAULT_SETTINGS.savedSessions,
+			hasCompletedOnboarding:
+				typeof rawSettings.hasCompletedOnboarding === "boolean"
+					? rawSettings.hasCompletedOnboarding
+					: DEFAULT_SETTINGS.hasCompletedOnboarding,
 		};
 
 		this.ensureActiveAgentId();

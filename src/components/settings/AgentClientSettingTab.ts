@@ -4,10 +4,12 @@ import {
 	Setting,
 	DropdownComponent,
 	Platform,
+	Notice,
 } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import type { CustomAgentSettings, AgentEnvVar } from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
+import { detectNodePath, detectAgentPath, validatePath } from "../../shared/path-detector";
 
 export class AgentClientSettingTab extends PluginSettingTab {
 	plugin: AgentClientPlugin;
@@ -59,16 +61,50 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Node.js path")
 			.setDesc(
-				'Absolute path to Node.js executable. On macOS/Linux, use "which node", and on Windows, use "where node" to find it.',
+				"Absolute path to Node.js executable. Required for npm-based agents.",
 			)
 			.addText((text) => {
 				text.setPlaceholder("Absolute path to node")
 					.setValue(this.plugin.settings.nodePath)
 					.onChange(async (value) => {
-						this.plugin.settings.nodePath = value.trim();
+						const trimmed = value.trim();
+						this.plugin.settings.nodePath = trimmed;
+						if (trimmed) {
+							const validation = validatePath(trimmed);
+							if (!validation.valid) {
+								new Notice(`Warning: ${validation.error}`, 3000);
+							}
+						}
 						await this.plugin.saveSettings();
 					});
-			});
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Auto-detect")
+					.setTooltip("Try to automatically detect Node.js installation")
+					.onClick(async () => {
+						const result = detectNodePath();
+						if (result.path) {
+							const validation = validatePath(result.path);
+							if (validation.valid) {
+								this.plugin.settings.nodePath = result.path;
+								await this.plugin.saveSettings();
+								this.display(); // Refresh to show new value
+								new Notice(`Node.js found: ${result.path}`, 3000);
+							} else {
+								new Notice(
+									`Node.js detected but not working: ${validation.error}`,
+									4000,
+								);
+							}
+						} else {
+							new Notice(
+								"Node.js not found. Please install Node.js first.",
+								4000,
+							);
+						}
+					}),
+			);
 
 		new Setting(containerEl)
 			.setName("Send message shortcut")
@@ -595,17 +631,49 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 		new Setting(sectionEl)
 			.setName("Path")
-			.setDesc(
-				'Absolute path to the Gemini CLI. On macOS/Linux, use "which gemini", and on Windows, use "where gemini" to find it.',
-			)
+			.setDesc("Absolute path to the Gemini CLI executable.")
 			.addText((text) => {
 				text.setPlaceholder("Absolute path to gemini")
 					.setValue(gemini.command)
 					.onChange(async (value) => {
-						this.plugin.settings.gemini.command = value.trim();
+						const trimmed = value.trim();
+						this.plugin.settings.gemini.command = trimmed;
+						if (trimmed) {
+							const validation = validatePath(trimmed);
+							if (!validation.valid) {
+								new Notice(`Warning: ${validation.error}`, 3000);
+							}
+						}
 						await this.plugin.saveSettings();
 					});
-			});
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Auto-detect")
+					.setTooltip("Try to automatically detect Gemini CLI")
+					.onClick(async () => {
+						const result = detectAgentPath("gemini-cli");
+						if (result.path) {
+							const validation = validatePath(result.path);
+							if (validation.valid) {
+								this.plugin.settings.gemini.command = result.path;
+								await this.plugin.saveSettings();
+								this.display();
+								new Notice(`Gemini CLI found: ${result.path}`, 3000);
+							} else {
+								new Notice(
+									`Detected but not working: ${validation.error}`,
+									4000,
+								);
+							}
+						} else {
+							new Notice(
+								"Gemini CLI not found. Install with: npm install -g @google/gemini-cli",
+								5000,
+							);
+						}
+					}),
+			);
 
 		new Setting(sectionEl)
 			.setName("Arguments")
@@ -664,16 +732,50 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(sectionEl)
 			.setName("Path")
 			.setDesc(
-				'Absolute path to the claude-code-acp. On macOS/Linux, use "which claude-code-acp", and on Windows, use "where claude-code-acp" to find it.',
+				"Absolute path to the claude-code-acp executable.",
 			)
 			.addText((text) => {
 				text.setPlaceholder("Absolute path to claude-code-acp")
 					.setValue(claude.command)
 					.onChange(async (value) => {
-						this.plugin.settings.claude.command = value.trim();
+						const trimmed = value.trim();
+						this.plugin.settings.claude.command = trimmed;
+						if (trimmed) {
+							const validation = validatePath(trimmed);
+							if (!validation.valid) {
+								new Notice(`Warning: ${validation.error}`, 3000);
+							}
+						}
 						await this.plugin.saveSettings();
 					});
-			});
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Auto-detect")
+					.setTooltip("Try to automatically detect claude-code-acp")
+					.onClick(async () => {
+						const result = detectAgentPath("claude-code-acp");
+						if (result.path) {
+							const validation = validatePath(result.path);
+							if (validation.valid) {
+								this.plugin.settings.claude.command = result.path;
+								await this.plugin.saveSettings();
+								this.display();
+								new Notice(`claude-code-acp found: ${result.path}`, 3000);
+							} else {
+								new Notice(
+									`Detected but not working: ${validation.error}`,
+									4000,
+								);
+							}
+						} else {
+							new Notice(
+								"claude-code-acp not found. Install with: npm install -g @zed-industries/claude-code-acp",
+								5000,
+							);
+						}
+					}),
+			);
 
 		new Setting(sectionEl)
 			.setName("Arguments")
@@ -731,17 +833,49 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 		new Setting(sectionEl)
 			.setName("Path")
-			.setDesc(
-				'Absolute path to the codex-acp. On macOS/Linux, use "which codex-acp", and on Windows, use "where codex-acp" to find it.',
-			)
+			.setDesc("Absolute path to the codex-acp executable.")
 			.addText((text) => {
 				text.setPlaceholder("Absolute path to codex-acp")
 					.setValue(codex.command)
 					.onChange(async (value) => {
-						this.plugin.settings.codex.command = value.trim();
+						const trimmed = value.trim();
+						this.plugin.settings.codex.command = trimmed;
+						if (trimmed) {
+							const validation = validatePath(trimmed);
+							if (!validation.valid) {
+								new Notice(`Warning: ${validation.error}`, 3000);
+							}
+						}
 						await this.plugin.saveSettings();
 					});
-			});
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Auto-detect")
+					.setTooltip("Try to automatically detect codex-acp")
+					.onClick(async () => {
+						const result = detectAgentPath("codex-acp");
+						if (result.path) {
+							const validation = validatePath(result.path);
+							if (validation.valid) {
+								this.plugin.settings.codex.command = result.path;
+								await this.plugin.saveSettings();
+								this.display();
+								new Notice(`codex-acp found: ${result.path}`, 3000);
+							} else {
+								new Notice(
+									`Detected but not working: ${validation.error}`,
+									4000,
+								);
+							}
+						} else {
+							new Notice(
+								"codex-acp not found. Install with: npm install -g @zed-industries/codex-acp",
+								5000,
+							);
+						}
+					}),
+			);
 
 		new Setting(sectionEl)
 			.setName("Arguments")

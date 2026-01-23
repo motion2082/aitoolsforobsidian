@@ -818,6 +818,8 @@ function ChatComponent({
 				acpClient={acpClientRef.current}
 				onApprovePermission={permission.approvePermission}
 				onClearError={handleClearError}
+				isAgentConfigured={!!session.agentId}
+				onOpenSettings={handleOpenSettings}
 			/>
 
 			<ChatInput
