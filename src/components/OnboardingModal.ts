@@ -168,7 +168,7 @@ export class OnboardingModal extends Modal {
 
 	private renderStep1() {
 		// Choose an agent
-		this.stepContainer.createEl("h3", { text: "Choose an Agent" });
+		this.stepContainer.createEl("h3", { text: "Choose an agent" });
 
 		this.stepContainer.createEl("p", {
 			text: "Select an AI agent to use:",
@@ -207,7 +207,7 @@ export class OnboardingModal extends Modal {
 
 	private renderStep2() {
 		// Enter API key
-		this.stepContainer.createEl("h3", { text: "API Key" });
+		this.stepContainer.createEl("h3", { text: "API key" });
 
 		this.stepContainer.createEl("p", {
 			text: `Enter your API key for ${this.selectedAgent?.provider}:`,
@@ -215,7 +215,7 @@ export class OnboardingModal extends Modal {
 
 		// API key input
 		new Setting(this.stepContainer)
-			.setName(`${this.selectedAgent?.provider} API Key`)
+			.setName(`${this.selectedAgent?.provider} API key`)
 			.setDesc("Your API key is stored securely in Obsidian settings")
 			.addText((text) => {
 				text.setPlaceholder("Enter your API key")
@@ -236,7 +236,7 @@ export class OnboardingModal extends Modal {
 
 	private renderStep3() {
 		// Base URL
-		this.stepContainer.createEl("h3", { text: "API Endpoint" });
+		this.stepContainer.createEl("h3", { text: "API endpoint" });
 
 		this.stepContainer.createEl("p", {
 			text: "Enter the base URL for API requests:",
@@ -283,7 +283,7 @@ export class OnboardingModal extends Modal {
 			cls: "obsidianaitools-onboarding-tip",
 		});
 
-		this.addNavigation("Start Chatting!", "Back", true);
+		this.addNavigation("Start chatting!", "Back", true);
 	}
 
 	private addNavigation(
@@ -321,11 +321,11 @@ export class OnboardingModal extends Modal {
 
 					if (installed) {
 						// Save settings and proceed
-						this.saveSettings();
+						void this.saveSettings();
 						this.currentStep++;
 						this.renderCurrentStep();
 					} else {
-						btn.setButtonText("Installation failed - Retry");
+						btn.setButtonText("Installation failed - retry");
 						btn.setDisabled(false);
 					}
 				} else {

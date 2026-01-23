@@ -165,7 +165,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-chat-view",
-			name: "AI tools",
+			name: "Chat",
 			callback: () => {
 				void this.activateView();
 			},
