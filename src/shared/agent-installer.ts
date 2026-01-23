@@ -113,7 +113,7 @@ export function installAgent(
 function getAgentNpmPackage(agentId: string): string {
 	switch (agentId) {
 		case "claude-code-acp":
-			return "@anthropics/claude-code-acp";
+			return "@zed-industries/claude-code-acp";
 		case "codex-acp":
 			return "@zed-industries/codex-acp";
 		case "gemini-cli":

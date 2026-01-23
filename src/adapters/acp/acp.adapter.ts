@@ -173,8 +173,29 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		// Update auto-allow permissions from plugin settings
 		this.autoAllowPermissions = this.plugin.settings.autoAllowPermissions;
 
-		// Validate command
+		// Check if command is configured
 		if (!config.command || config.command.trim().length === 0) {
+			// For known agents with auto-install enabled, emit error with install option
+			if (isKnownAgent(config.id) && this.plugin.settings.autoInstallAgents) {
+				const agentError: AgentError = {
+					id: crypto.randomUUID(),
+					category: "configuration",
+					severity: "error",
+					title: "Command Not Configured",
+					message: `${getAgentDisplayName(config.id)} is not configured. Click "Install" to install and configure it automatically.`,
+					suggestion: "Click 'Install' to install via npm, or configure the path manually in settings.",
+					occurredAt: new Date(),
+					agentId: config.id,
+					code: "COMMAND_NOT_CONFIGURED",
+					canAutoInstall: true,
+				};
+				// Emit error via callback AND throw so it can be caught by useAgentSession
+				this.errorCallback?.(agentError);
+				// Wrap in Error for ESLint compliance, but attach the original error info
+				const wrappedError = new Error(agentError.message);
+				(wrappedError as Error & { agentError: AgentError }).agentError = agentError;
+				throw wrappedError;
+			}
 			throw new Error(
 				`Command not configured for agent "${config.displayName}" (${config.id}). Please configure the agent command in settings.`,
 			);
@@ -827,6 +848,11 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 					this.logger.log(
 						`[AcpAdapter] Successfully installed ${getAgentDisplayName(agentId)}`,
 					);
+					// Auto-configure the command path after successful installation
+					const commandName = this.getCommandNameForAgent(agentId);
+					if (commandName) {
+						this.setAgentCommand(agentId, commandName);
+					}
 					resolve(true);
 				} else {
 					this.logger.error(
@@ -844,6 +870,37 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				resolve(false);
 			});
 		});
+	}
+
+	/**
+	 * Get the command name for a known agent
+	 */
+	private getCommandNameForAgent(agentId: string): string | null {
+		switch (agentId) {
+			case "claude-code-acp":
+				return "claude-code-acp";
+			case "codex-acp":
+				return "codex-acp";
+			case "gemini-cli":
+				return "gemini";
+			default:
+				return null;
+		}
+	}
+
+	/**
+	 * Set the command path for an agent in settings
+	 */
+	private setAgentCommand(agentId: string, command: string): void {
+		const settings = this.plugin.settings;
+		if (agentId === settings.claude.id) {
+			settings.claude.command = command;
+		} else if (agentId === settings.codex.id) {
+			settings.codex.command = command;
+		} else if (agentId === settings.gemini.id) {
+			settings.gemini.command = command;
+		}
+		void this.plugin.saveSettings();
 	}
 
 	/**

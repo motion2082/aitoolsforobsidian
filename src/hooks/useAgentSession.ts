@@ -13,6 +13,7 @@ import type { AgentClientPluginSettings } from "../plugin";
 import type {
 	BaseAgentSettings,
 } from "../domain/models/agent-config";
+import type { AgentError } from "../domain/models/agent-error";
 import { toAgentConfig } from "../shared/settings-utils";
 
 // ============================================================================
@@ -597,11 +598,24 @@ export function useAgentSession(
 			} catch (error) {
 				// Error - update to error state
 				setSession((prev) => ({ ...prev, state: "error" }));
-				setErrorInfo({
-					title: "Session Loading Failed",
-					message: `Failed to load session: ${error instanceof Error ? error.message : String(error)}`,
-					suggestion: "Please try again or create a new session.",
-				});
+				// Check if this is an Error with attached AgentError
+				const err = error as Error & { agentError?: AgentError };
+				if (err.agentError) {
+					const agentError = err.agentError;
+					setErrorInfo({
+						title: agentError.title || "Agent Error",
+						message: agentError.message,
+						suggestion: agentError.suggestion,
+						canAutoInstall: agentError.canAutoInstall,
+						agentId: agentError.agentId,
+					});
+				} else {
+					setErrorInfo({
+						title: "Session Loading Failed",
+						message: `Failed to load session: ${error instanceof Error ? error.message : String(error)}`,
+						suggestion: "Please try again or create a new session.",
+					});
+				}
 			}
 		},
 		[agentClient, settingsAccess, workingDirectory],
