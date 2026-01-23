@@ -21,8 +21,13 @@ import {
 import { spawn } from "child_process";
 
 // ============================================================================
-// Helper Functions for Auto-Install
+// Auto-Install Helpers
 // ============================================================================
+
+interface InstallResult {
+	success: boolean;
+	command: string;
+}
 
 /**
  * Get the command name for a known agent
@@ -41,68 +46,79 @@ function getCommandNameForAgent(agentId: string): string | null {
 }
 
 /**
- * Install an agent if needed and return true on success
+ * Auto-install an agent if command is not configured
+ * Returns object with success status and the command to use
  */
-async function installAgentIfNeeded(
+async function autoInstallAgent(
 	agentId: string,
 	nodePath: string,
-): Promise<boolean> {
+	wslMode: boolean,
+	wslDistribution: string | undefined,
+): Promise<InstallResult> {
 	const installCommand = getAgentInstallCommand(agentId);
-	if (!installCommand) return false;
+	if (!installCommand) {
+		return { success: false, command: "" };
+	}
+
+	const packageName = installCommand.replace("npm install -g ", "");
+	const commandName = getCommandNameForAgent(agentId);
+	if (!commandName) {
+		return { success: false, command: "" };
+	}
 
 	// Derive npm path from node path
 	const nodeDir = nodePath.trim() ? nodePath.trim().replace(/\/node$/, "") : "";
 	const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
 
-	// Build command
+	// Build installation command
+	const installArgs = `${npmExec} install -g ${packageName}`;
+
+	// Determine spawn command based on platform
 	let command: string;
 	let args: string[];
-	const packageName = installCommand.replace("npm install -g ", "");
 
-	if (process.platform === "win32") {
+	if (wslMode && wslDistribution) {
+		// Use WSL
+		command = "wsl";
+		args = ["--distribution", wslDistribution, "-e", "bash", "-l", "-c", installArgs];
+	} else if (process.platform === "win32") {
+		// Windows without WSL
 		command = "cmd.exe";
-		args = ["/c", `${npmExec} install -g ${packageName}`];
+		args = ["/c", installArgs];
 	} else {
+		// Linux/macOS
 		command = "/bin/bash";
-		args = ["-l", "-c", `${npmExec} install -g ${packageName}`];
+		args = ["-l", "-c", installArgs];
 	}
+
+	console.warn(`[AutoInstall] Installing ${agentId}...`);
 
 	return new Promise((resolve) => {
 		const child = spawn(command, args, {
 			stdio: "inherit",
 			env: {
 				...process.env,
-				...(nodeDir
+				...(nodeDir && !wslMode
 					? { PATH: `${nodeDir}:${process.env.PATH || ""}` }
 					: {}),
 			},
 		});
 
 		child.on("close", (code: number) => {
-			resolve(code === 0);
+			if (code === 0) {
+				console.warn(`[AutoInstall] Successfully installed ${agentId}`);
+				resolve({ success: true, command: commandName });
+			} else {
+				console.error(`[AutoInstall] Failed to install ${agentId} (exit code: ${code})`);
+				resolve({ success: false, command: "" });
+			}
 		});
 
-		child.on("error", () => {
-			resolve(false);
+		child.on("error", (error) => {
+			console.error(`[AutoInstall] Error installing ${agentId}:`, error);
+			resolve({ success: false, command: "" });
 		});
 	});
-}
-
-/**
- * Update the agent command in settings
- */
-function updateAgentCommand(
-	settings: AgentClientPluginSettings,
-	agentId: string,
-	command: string,
-): void {
-	if (agentId === settings.claude.id) {
-		settings.claude.command = command;
-	} else if (agentId === settings.codex.id) {
-		settings.codex.command = command;
-	} else if (agentId === settings.gemini.id) {
-		settings.gemini.command = command;
-	}
 }
 
 // ============================================================================
@@ -495,19 +511,23 @@ export function useAgentSession(
 				settings.autoInstallAgents &&
 				(!agentSettings.command || agentSettings.command.trim().length === 0)
 			) {
-				const commandName = getCommandNameForAgent(activeAgentId);
-				if (commandName) {
-					// Install the agent
-					const installed = await installAgentIfNeeded(
-						activeAgentId,
-						settings.nodePath,
-					);
-					if (installed) {
-						// Update settings with command path
-						updateAgentCommand(settings, activeAgentId, commandName);
-						// Update the local agentSettings reference
-						agentSettings.command = commandName;
+				const result = await autoInstallAgent(
+					activeAgentId,
+					settings.nodePath,
+					settings.windowsWslMode,
+					settings.windowsWslDistribution,
+				);
+				if (result.success) {
+					// Update settings with command path
+					if (activeAgentId === settings.claude.id) {
+						settings.claude.command = result.command;
+					} else if (activeAgentId === settings.codex.id) {
+						settings.codex.command = result.command;
+					} else if (activeAgentId === settings.gemini.id) {
+						settings.gemini.command = result.command;
 					}
+					// Update the local agentSettings reference
+					agentSettings.command = result.command;
 				}
 			}
 
