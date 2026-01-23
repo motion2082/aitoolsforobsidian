@@ -112,15 +112,16 @@ export class OnboardingModal extends Modal {
 
 		if (this.currentStep > 3) {
 			// Save settings and finish
-			this.saveSettings();
-			this.close();
-			void this.plugin.activateView();
+			void this.saveSettings().then(() => {
+				this.close();
+				void this.plugin.activateView();
+			});
 			return;
 		}
 		this.renderCurrentStep();
 	}
 
-	private saveSettings() {
+	private async saveSettings(): Promise<void> {
 		const settings = this.plugin.settings;
 
 		// Save API key and base URL
@@ -143,7 +144,7 @@ export class OnboardingModal extends Modal {
 		// Mark onboarding as complete
 		settings.hasCompletedOnboarding = true;
 
-		void this.plugin.saveSettings();
+		await this.plugin.saveSettings();
 	}
 
 	private renderCurrentStep() {

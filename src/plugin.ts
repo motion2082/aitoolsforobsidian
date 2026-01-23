@@ -156,7 +156,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		const ribbonIconEl = this.addRibbonIcon(
 			"bot-message-square",
-			"Open agent client",
+			"Open AI Tools",
 			(_evt: MouseEvent) => {
 				void this.activateView();
 			},
@@ -165,7 +165,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-chat-view",
-			name: "Open agent chat",
+			name: "Open AI Tools chat",
 			callback: () => {
 				void this.activateView();
 			},
