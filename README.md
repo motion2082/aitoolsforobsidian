@@ -7,14 +7,6 @@
   <img src="https://img.shields.io/github/last-commit/UltimateAI-org/aitoolsforobsidian" alt="GitHub last commit">
 </p>
 
-<p align="center">
-  <a href="README.ja.md">日本語はこちら</a>
-</p>
-
-<p align="center">
-  <a href="https://www.buymeacoffee.com/rait09" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="180" height="50" ></a>
-</p>
-
 Bring your AI agents directly into Obsidian! This plugin lets you chat with Claude Code, Codex, Gemini CLI, and other AI agents right from your vault. Your AI assistant is now just a side panel away. ✨
 
 Built on [Agent Client Protocol (ACP)](https://github.com/zed-industries/agent-client-protocol) by Zed.
