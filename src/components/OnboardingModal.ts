@@ -40,20 +40,20 @@ export class OnboardingModal extends Modal {
 			package: "@zed-industries/claude-code-acp",
 			description: "Popular for general coding tasks",
 		},
-		{
-			id: "codex-acp",
-			name: "Codex",
-			provider: "OpenAI",
-			package: "@zed-industries/codex-acp",
-			description: "Code generation focused",
-		},
-		{
-			id: "gemini-cli",
-			name: "Gemini CLI",
-			provider: "Google",
-			package: "@google/gemini-cli",
-			description: "Experimental ACP support",
-		},
+		// {
+		// 	id: "codex-acp",
+		// 	name: "Codex",
+		// 	provider: "OpenAI",
+		// 	package: "@zed-industries/codex-acp",
+		// 	description: "Code generation focused",
+		// },
+		// {
+		// 	id: "gemini-cli",
+		// 	name: "Gemini CLI",
+		// 	provider: "Google",
+		// 	package: "@google/gemini-cli",
+		// 	description: "Experimental ACP support",
+		// },
 	];
 
 	constructor(app: App, plugin: AgentClientPlugin) {
@@ -80,18 +80,6 @@ export class OnboardingModal extends Modal {
 		this.stepContainer = contentEl.createDiv({
 			cls: "obsidianaitools-onboarding-steps",
 		});
-
-		// Navigation buttons
-		const navContainer = contentEl.createDiv({
-			cls: "obsidianaitools-onboarding-nav",
-		});
-
-		new ButtonComponent(navContainer)
-			.setButtonText("Get Started")
-			.setCta()
-			.onClick(() => {
-				this.nextStep();
-			});
 
 		// Close button
 		new Setting(contentEl)
@@ -194,7 +182,7 @@ export class OnboardingModal extends Modal {
 			this.createAgentCard(cardsContainer, agent);
 		}
 
-		this.addNavigation("Next: API Key →", undefined, false);
+		this.addNavigation("Get Started", undefined, true, false, !this.selectedAgent);
 	}
 
 	private createAgentCard(parent: HTMLElement, agent: AgentOption) {
@@ -302,6 +290,7 @@ export class OnboardingModal extends Modal {
 		backText?: string,
 		isPrimary = false,
 		triggerInstall = false,
+		forceDisabled = false,
 	) {
 		const navContainer = this.stepContainer.createDiv({
 			cls: "obsidianaitools-onboarding-nav",
@@ -318,7 +307,7 @@ export class OnboardingModal extends Modal {
 
 		const btn = new ButtonComponent(navContainer)
 			.setButtonText(nextText)
-			.setDisabled(false)
+			.setDisabled(forceDisabled)
 			.onClick(async () => {
 				if (triggerInstall && this.selectedAgent) {
 					// Run installation
