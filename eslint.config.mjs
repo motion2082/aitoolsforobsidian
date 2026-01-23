@@ -20,6 +20,8 @@ export default defineConfig([
 			"@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
 			"@typescript-eslint/ban-ts-comment": "off",
 			"@typescript-eslint/no-empty-function": "off",
+			// Sentence case rule as warning (acceptable for UI text, brand names)
+			"obsidianmd/ui/sentence-case": "warn",
 		},
 	},
 ]);
