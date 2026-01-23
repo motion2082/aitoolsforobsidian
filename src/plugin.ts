@@ -149,8 +149,6 @@ export default class AgentClientPlugin extends Plugin {
 			// Use setTimeout to ensure UI is ready
 			setTimeout(() => {
 				new OnboardingModal(this.app, this).open();
-				this.settings.hasCompletedOnboarding = true;
-				void this.saveSettings();
 			}, 100);
 		}
 

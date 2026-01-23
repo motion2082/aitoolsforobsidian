@@ -18,7 +18,7 @@ export interface InstallResult {
 export function getAgentInstallCommand(agentId: string): string {
 	switch (agentId) {
 		case "claude-code-acp":
-			return "npm install -g @anthropics/claude-code-acp";
+			return "npm install -g @zed-industries/claude-code-acp";
 		case "codex-acp":
 			return "npm install -g @zed-industries/codex-acp";
 		case "gemini-cli":

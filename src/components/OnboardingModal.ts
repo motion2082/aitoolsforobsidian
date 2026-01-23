@@ -316,8 +316,8 @@ export class OnboardingModal extends Modal {
 		}
 
 		const btn = new ButtonComponent(navContainer)
-			.setButtonText(triggerInstall ? "Installing..." : nextText)
-			.setDisabled(triggerInstall)
+			.setButtonText(nextText)
+			.setDisabled(false)
 			.onClick(async () => {
 				if (triggerInstall && this.selectedAgent) {
 					// Run installation
@@ -348,14 +348,36 @@ export class OnboardingModal extends Modal {
 
 	private async installAgent(agent: AgentOption): Promise<boolean> {
 		const installCommand = getAgentInstallCommand(agent.id);
-		if (!installCommand) return false;
+		if (!installCommand) {
+			console.error(`[Onboarding] No install command for agent: ${agent.id}`);
+			return false;
+		}
 
 		const packageName = installCommand.replace("npm install -g ", "");
-		const nodePath = this.plugin.settings.nodePath;
+		let nodePath = this.plugin.settings.nodePath;
+
+		// Auto-detect Node.js path if not configured
+		if (!nodePath.trim()) {
+			console.warn(`[Onboarding] Node path not set, attempting auto-detect...`);
+			// Import and use path detector
+			try {
+				const { detectNodePath } = await import("../shared/path-detector");
+				const detected = detectNodePath();
+				if (detected?.path) {
+					nodePath = detected.path;
+					console.warn(`[Onboarding] Auto-detected Node.js: ${nodePath}`);
+				}
+			} catch (e) {
+				console.warn(`[Onboarding] Could not auto-detect Node.js: ${e}`);
+			}
+		}
+
 		const nodeDir = nodePath.trim()
 			? nodePath.trim().replace(/\/node$/, "")
 			: "";
 		const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
+
+		console.warn(`[Onboarding] Installing ${agent.name} (${packageName}) using ${npmExec}...`);
 
 		return new Promise((resolve) => {
 			let command: string;
@@ -370,8 +392,6 @@ export class OnboardingModal extends Modal {
 				args = ["-l", "-c", installArgs];
 			}
 
-			console.warn(`[Onboarding] Installing ${agent.name}...`);
-
 			const child = spawn(command, args, {
 				stdio: ["pipe", "pipe", "pipe"],
 				env: {
@@ -383,16 +403,31 @@ export class OnboardingModal extends Modal {
 			});
 
 			let output = "";
+			let hasTimeout = false;
+
+			// Timeout after 2 minutes
+			const timeout = setTimeout(() => {
+				hasTimeout = true;
+				console.error(`[Onboarding] Installation timed out after 2 minutes`);
+				child.kill("SIGTERM");
+				resolve(false);
+			}, 120000);
+
 			child.stdout?.on("data", (data: unknown) => {
 				const text = typeof data === "string" ? data : String(data);
 				output += text;
+				console.warn(`[Onboarding] npm stdout: ${text.substring(0, 200)}`);
 			});
 			child.stderr?.on("data", (data: unknown) => {
 				const text = typeof data === "string" ? data : String(data);
 				output += text;
+				console.warn(`[Onboarding] npm stderr: ${text.substring(0, 200)}`);
 			});
 
 			child.on("close", (code: number) => {
+				clearTimeout(timeout);
+				if (hasTimeout) return;
+
 				if (code === 0) {
 					console.warn(`[Onboarding] Successfully installed ${agent.name}`);
 					resolve(true);
@@ -405,6 +440,8 @@ export class OnboardingModal extends Modal {
 			});
 
 			child.on("error", (error) => {
+				clearTimeout(timeout);
+				if (hasTimeout) return;
 				console.error(`[Onboarding] Error installing ${agent.name}:`, error);
 				resolve(false);
 			});
