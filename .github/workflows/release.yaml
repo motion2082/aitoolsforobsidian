@@ -60,7 +60,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          version="${{ needs.validate.outputs.version }}"
 
           # Create release notes from commits since last tag
           previous_tag=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
@@ -70,8 +69,8 @@ jobs:
             changelog=$(git log --pretty=format:"- %s" | head -20)
           fi
 
-          # Create release body
-          body=$(cat <<ENDRELEASE
+          # Write release notes to file
+          cat > /tmp/release-notes.md <<-EOF
 ## Changes
 
 $changelog
@@ -81,13 +80,12 @@ $changelog
 - main.js
 - manifest.json
 - styles.css
-ENDRELEASE
-)
+EOF
 
           # Create release
           gh release create "$tag" \
             --title="$tag" \
-            --notes "$body" \
+            --notes-file /tmp/release-notes.md \
             main.js manifest.json styles.css
 
           echo "Release '$tag' created successfully"
