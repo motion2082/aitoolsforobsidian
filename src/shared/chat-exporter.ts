@@ -44,7 +44,7 @@ export class ChatExporter {
 			messages.length > 0 ? messages[0].timestamp : sessionCreatedAt;
 
 		const fileName = this.generateFileName(effectiveTimestamp);
-		const folderPath = settings.defaultFolder || "Agent Client";
+		const folderPath = settings.defaultFolder || "AI Tools";
 
 		// Create folder if it doesn't exist
 		await this.ensureFolderExists(folderPath);

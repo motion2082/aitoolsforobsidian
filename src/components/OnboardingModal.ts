@@ -193,7 +193,7 @@ export class OnboardingModal extends Modal {
 		});
 		card.onclick = () => {
 			this.selectedAgent = agent;
-			this.renderStep1(); // Re-render to show selection
+			this.renderCurrentStep(); // Use renderCurrentStep to properly empty container
 		};
 
 		card.createEl("h4", { text: agent.name });

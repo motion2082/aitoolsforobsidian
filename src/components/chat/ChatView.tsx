@@ -66,7 +66,7 @@ function ChatComponent({
 	// Platform Check
 	// ============================================================
 	if (!Platform.isDesktopApp) {
-		throw new Error("Agent Client is only available on desktop");
+		throw new Error("AI Tools is only available on desktop");
 	}
 
 	// ============================================================
@@ -264,7 +264,7 @@ function ChatComponent({
 
 			// Skip if already empty AND not switching agents
 			if (messages.length === 0 && !isAgentSwitch) {
-				new Notice("[Agent Client] Already a new session");
+				new Notice("[AI Tools] Already a new session");
 				return;
 			}
 
@@ -312,7 +312,7 @@ function ChatComponent({
 
 	const handleExportChat = useCallback(async () => {
 		if (messages.length === 0) {
-			new Notice("[Agent Client] No messages to export");
+			new Notice("[AI Tools] No messages to export");
 			return;
 		}
 
@@ -327,9 +327,9 @@ function ChatComponent({
 				session.createdAt,
 				openFile,
 			);
-			new Notice(`[Agent Client] Chat exported to ${filePath}`);
+			new Notice(`[AI Tools] Chat exported to ${filePath}`);
 		} catch (error) {
-			new Notice("[Agent Client] Failed to export chat");
+			new Notice("[AI Tools] Failed to export chat");
 			logger.error("Export error:", error);
 		}
 	}, [messages, session, plugin, logger]);
@@ -349,9 +349,9 @@ function ChatComponent({
 				logger.log(`[ChatView] Restoring session: ${sessionId}`);
 				chat.clearMessages();
 				await sessionHistory.restoreSession(sessionId, cwd);
-				new Notice("[Agent Client] Session restored");
+				new Notice("[AI Tools] Session restored");
 			} catch (error) {
-				new Notice("[Agent Client] Failed to restore session");
+				new Notice("[AI Tools] Failed to restore session");
 				logger.error("Session restore error:", error);
 			}
 		},
@@ -364,9 +364,9 @@ function ChatComponent({
 				logger.log(`[ChatView] Forking session: ${sessionId}`);
 				chat.clearMessages();
 				await sessionHistory.forkSession(sessionId, cwd);
-				new Notice("[Agent Client] Session forked");
+				new Notice("[AI Tools] Session forked");
 			} catch (error) {
-				new Notice("[Agent Client] Failed to fork session");
+				new Notice("[AI Tools] Failed to fork session");
 				logger.error("Session fork error:", error);
 			}
 		},
@@ -387,9 +387,9 @@ function ChatComponent({
 					try {
 						logger.log(`[ChatView] Deleting session: ${sessionId}`);
 						await sessionHistory.deleteSession(sessionId);
-						new Notice("[Agent Client] Session deleted");
+						new Notice("[AI Tools] Session deleted");
 					} catch (error) {
-						new Notice("[Agent Client] Failed to delete session");
+						new Notice("[AI Tools] Failed to delete session");
 						logger.error("Session delete error:", error);
 					}
 				},
@@ -792,7 +792,7 @@ function ChatComponent({
 					const success = await permission.approveActivePermission();
 					if (!success) {
 						new Notice(
-							"[Agent Client] No active permission request",
+							"[AI Tools] No active permission request",
 						);
 					}
 				})();
@@ -806,7 +806,7 @@ function ChatComponent({
 					const success = await permission.rejectActivePermission();
 					if (!success) {
 						new Notice(
-							"[Agent Client] No active permission request",
+							"[AI Tools] No active permission request",
 						);
 					}
 				})();

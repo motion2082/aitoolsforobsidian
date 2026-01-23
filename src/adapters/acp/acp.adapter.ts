@@ -474,7 +474,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				},
 				clientInfo: {
 					name: "aitoolsforobsidian",
-					title: "Agent Client for Obsidian",
+					title: "AI Tools for Obsidian",
 					version: this.plugin.manifest.version,
 				},
 			});
@@ -1094,7 +1094,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			return `${installHint}
 
 To fix:
-1. Open Settings → Agent Client → Path
+1. Open Settings → AI Tools → Path
 2. Enter the full path to ${commandName}
 3. Or click "Auto-detect" to find it automatically`;
 		} else {
@@ -1103,7 +1103,7 @@ To fix:
 To fix:
 1. Run "which ${commandName}" to find the correct path
 2. Or run "npm list -g --depth=0" to check if it's installed
-3. Update the path in Settings → Agent Client → Path`;
+3. Update the path in Settings → AI Tools → Path`;
 		}
 	}
 

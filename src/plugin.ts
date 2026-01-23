@@ -106,14 +106,14 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	debugMode: false,
 	nodePath: "",
 	exportSettings: {
-		defaultFolder: "Agent Client",
+		defaultFolder: "AI Tools",
 		filenameTemplate: "agent_client_{date}_{time}",
 		autoExportOnNewChat: false,
 		autoExportOnCloseChat: false,
 		openFileAfterExport: true,
 		includeImages: true,
 		imageLocation: "obsidian",
-		imageCustomFolder: "Agent Client",
+		imageCustomFolder: "AI Tools",
 	},
 	windowsWslMode: false,
 	windowsWslDistribution: undefined,
@@ -660,7 +660,7 @@ export default class AgentClientPlugin extends Plugin {
 					? latestStable
 					: latestPrerelease;
 				new Notice(
-					`[Agent Client] Update available: v${newestVersion}`,
+					`[AI Tools] Update available: v${newestVersion}`,
 				);
 				return true;
 			}
@@ -668,7 +668,7 @@ export default class AgentClientPlugin extends Plugin {
 			// Stable version user: check stable only
 			const latestStable = await this.fetchLatestStable();
 			if (latestStable && semver.gt(latestStable, currentVersion)) {
-				new Notice(`[Agent Client] Update available: v${latestStable}`);
+				new Notice(`[AI Tools] Update available: v${latestStable}`);
 				return true;
 			}
 		}

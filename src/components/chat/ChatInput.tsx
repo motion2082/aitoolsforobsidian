@@ -202,7 +202,7 @@ export function ChatInput({
 				// Check image count
 				if (attachedImages.length + addedCount >= MAX_IMAGE_COUNT) {
 					new Notice(
-						`[Agent Client] Maximum ${MAX_IMAGE_COUNT} images allowed`,
+						`[AI Tools] Maximum ${MAX_IMAGE_COUNT} images allowed`,
 					);
 					break;
 				}
@@ -210,7 +210,7 @@ export function ChatInput({
 				// Check file size (before conversion - memory efficiency)
 				if (file.size > MAX_IMAGE_SIZE_BYTES) {
 					new Notice(
-						`[Agent Client] Image too large (max ${MAX_IMAGE_SIZE_MB}MB)`,
+						`[AI Tools] Image too large (max ${MAX_IMAGE_SIZE_MB}MB)`,
 					);
 					continue;
 				}
@@ -226,7 +226,7 @@ export function ChatInput({
 					addedCount++;
 				} catch (error) {
 					console.error("Failed to convert image:", error);
-					new Notice("[Agent Client] Failed to attach image");
+					new Notice("[AI Tools] Failed to attach image");
 				}
 			}
 		},
@@ -260,7 +260,7 @@ export function ChatInput({
 
 			if (!supportsImages) {
 				new Notice(
-					"[Agent Client] This agent does not support image attachments",
+					"[AI Tools] This agent does not support image attachments",
 				);
 				return;
 			}
@@ -326,7 +326,7 @@ export function ChatInput({
 
 			if (!supportsImages) {
 				new Notice(
-					"[Agent Client] This agent does not support image attachments",
+					"[AI Tools] This agent does not support image attachments",
 				);
 				return;
 			}
