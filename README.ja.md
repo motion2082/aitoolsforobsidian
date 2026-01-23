@@ -66,9 +66,17 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
   npm install -g @google/gemini-cli
   ```
 
-### ステップ2: 🔍 インストールパスを確認
+### ステップ2: 🔍 パスの設定（自動検出機能付き！）
 
-エージェントをインストールした後、それぞれの絶対パスを確認してください:
+エージェントをインストールした後、プラグイン設定でパスを構成します。**自動検出**ボタンを使用すると、自動的にパスが見つかります！
+
+**方法1: 自動検出（推奨）**
+1. **Settings → Agent Client**を開く
+2. 各パスフィールドの横にある**自動検出**をクリック
+3. インストールされている実行ファイルが自動的に検索されます
+
+**方法2: 手動設定**
+自動検出でインストールが見つからない場合は、手動でパスを入力してください:
 
 **macOS/Linuxの場合:**
 ```bash
@@ -111,17 +119,15 @@ where.exe gemini
 ### ステップ3: 🛠️ プラグインをセットアップ
 
 1. **Settings → Agent Client**を開く
-2. node のパスを設定:
-   - **Node.js path**: 上記で確認した絶対パスを入力 (例: `/usr/local/bin/node` または `C:\Program Files\nodejs\node.exe`)
-1. 使用するエージェントを設定:
+2. 使用するエージェントを設定:
    - **Claude Code**:
-     - **Path**: 絶対パスを入力 (例: `/usr/local/bin/claude-code-acp`)
+     - **Path**: 絶対パスを入力（または**自動検出**をクリック）
      - **API key**: Anthropicアカウントにログイン済みの場合は任意
-   - **Codex**
-	   - **Path**: 絶対パスを入力 (例: `/usr/local/bin/codex-acp`)
+   - **Codex**:
+	   - **Path**: 絶対パスを入力（または**自動検出**をクリック）
 	   - **API key**: OpenAIアカウントにログイン済みの場合は任意
    - **Gemini CLI**:
-     - **Path**: 絶対パスを入力 (例: `/usr/local/bin/gemini`)
+     - **Path**: 絶対パスを入力（または**自動検出**をクリック）
      - **API key**: Googleアカウントにログイン済みの場合は任意
    - **Custom Agents**: ACP互換のエージェントを追加可能
 

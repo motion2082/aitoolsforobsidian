@@ -1,24 +1,44 @@
 # FAQ
 
-Frequently asked questions about Agent Client.
+Frequently asked questions about AI Tools for Obsidian.
 
 ## General
 
-### What is Agent Client?
+### What is AI Tools for Obsidian?
 
-Agent Client is an Obsidian plugin that lets you chat with AI agents directly within Obsidian. It supports Claude Code, Codex, Gemini CLI, and any ACP-compatible agent. The plugin uses the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) to communicate with agents.
+AI Tools for Obsidian is an Obsidian plugin that lets you chat with AI agents directly within Obsidian. It supports Claude Code, Codex, Gemini CLI, and any ACP-compatible agent. The plugin uses the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) to communicate with agents.
+
+On first launch, you'll see an **onboarding wizard** that guides you through setup!
 
 ### Is this an official Anthropic/OpenAI/Google plugin?
 
-No. Agent Client is a community-developed plugin. It uses official agent packages but is not affiliated with any AI provider.
+No. AI Tools for Obsidian is a community-developed plugin. It uses official agent packages but is not affiliated with any AI provider.
 
 ### Does this work on mobile?
 
-No. Agent Client is desktop-only. Agents run as local processes, which is not supported on mobile devices.
+No. AI Tools for Obsidian is desktop-only. Agents run as local processes, which is not supported on mobile devices.
 
 ### Is my data sent to AI providers?
 
 Yes. When you send a message, it's processed by the AI provider behind your selected agent (Anthropic, OpenAI, Google, etc.). Review each provider's privacy policy for details.
+
+## Setup & Configuration
+
+### How do I set up the plugin?
+
+1. Install the plugin via BRAT or manual installation
+2. On first launch, follow the **onboarding wizard**
+3. Install your chosen agent (Claude Code, Codex, or Gemini CLI)
+4. Click **Auto-detect** in settings to find paths automatically
+5. Start chatting!
+
+### What is the Auto-detect feature?
+
+The plugin includes **Auto-detect** buttons for Node.js and agent paths. Click the button and the plugin will search for installed executables in common locations. This saves you from manually finding paths with terminal commands.
+
+### I missed the onboarding wizard. Can I see it again?
+
+The onboarding wizard runs on first launch. To see it again, reset the onboarding flag in settings or check the [Getting Started](/getting-started/) documentation.
 
 ## Note Mentions
 

@@ -70,9 +70,17 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
   npm install -g @google/gemini-cli
   ```
 
-### Step 2: 🔍 Find Installation Paths
+### Step 2: 🔍 Configure Paths (Auto-Detect Available!)
 
-After installing the agents, you need to find their absolute paths:
+After installing the agents, configure their paths in the plugin settings. The plugin includes **Auto-detect** buttons to help you find paths automatically!
+
+**Option 1: Auto-detect (Recommended)**
+1. Open **Settings → Agent Client**
+2. Click the **Auto-detect** button next to each path field
+3. The plugin will search for installed executables
+
+**Option 2: Manual Configuration**
+If auto-detect doesn't find your installation, manually enter the paths:
 
 **On macOS/Linux:**
 ```bash
@@ -115,17 +123,15 @@ where.exe gemini
 ### Step 3: 🛠️ Configure Plugin Settings
 
 1. Open **Settings → Agent Client**
-2. Configure your node path:
-   - **Node.js path**: Enter the absolute path found above (e.g., `/usr/local/bin/node` or `C:\Program Files\nodejs\node.exe`)
-3. Configure your preferred agents:
+2. Configure your preferred agents:
    - **Claude Code**:
-     - **Path**: Enter absolute path (e.g., `/usr/local/bin/claude-code-acp`)
+     - **Path**: Enter absolute path (or click **Auto-detect**)
      - **API key**: Optional if logged in to Anthropic account
-   - **Codex**
-	   - **Path**: Enter absolute path (e.g., `/usr/local/bin/codex-acp`)
+   - **Codex**:
+	   - **Path**: Enter absolute path (or click **Auto-detect**)
 	   - **API key**: Optional if logged in to OpenAI account
    - **Gemini CLI**:
-     - **Path**: Enter absolute path (e.g., `/usr/local/bin/gemini`)
+     - **Path**: Enter absolute path (or click **Auto-detect**)
      - **API key**: Optional if logged in to Google account
    - **Custom Agents**: Add any ACP-compatible agents
 

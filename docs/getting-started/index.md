@@ -1,9 +1,5 @@
 # Installation
 
-::: info 🚧 Under Review
-This plugin is awaiting approval for **Obsidian Community Plugins**. For now, use **BRAT** (recommended) or manual installation.
-:::
-
 ## Install the Plugin
 
 ### Via BRAT (Recommended)
@@ -15,7 +11,7 @@ This plugin is awaiting approval for **Obsidian Community Plugins**. For now, us
    https://github.com/UltimateAI-org/aitoolsforobsidian
    ```
 4. BRAT will download the latest release and keep it auto-updated
-5. Enable **Agent Client** from the plugin list
+5. Enable **AI Tools** from the plugin list
 
 ### Manual Installation
 
@@ -27,40 +23,43 @@ This plugin is awaiting approval for **Obsidian Community Plugins**. For now, us
 3. Place the downloaded files in this folder
 4. Enable the plugin in **Obsidian Settings → Community Plugins**
 
-## Prerequisites
+## First Launch
 
-### Node.js
+On first launch, you'll see an **onboarding wizard** that guides you through:
 
-::: tip Not always required
-Node.js is needed for npm-based agents like Claude Code, Codex, and Gemini CLI. If your agent is a standalone binary, you can skip this step.
-:::
+1. **What is this plugin?** - Learn what AI Tools for Obsidian can do
+2. **Prerequisites** - Check if you have Node.js installed
+3. **Choose an Agent** - See available AI agents and installation commands
+4. **Configure** - Learn how to set up your agent
+5. **Ready!** - Get links to documentation and start chatting
 
-If you need Node.js:
+After closing the onboarding, the chat view opens automatically!
 
-1. Download from [nodejs.org](https://nodejs.org/)
-2. Install the LTS version (recommended)
+## Quick Setup
 
-### Find Your Node.js Path
+### Node.js Path
 
-::: code-group
+**Option 1: Auto-detect (Recommended)**
+1. Open **Settings → Agent Client**
+2. Click **Auto-detect** next to the Node.js path field
+3. If Node.js is installed, the path will be filled automatically
 
+**Option 2: Manual**
 ```bash [macOS/Linux]
 which node
-# Example output: /usr/local/bin/node
 ```
 
 ```cmd [Windows]
 where.exe node
-# Example output: C:\Program Files\nodejs\node.exe
 ```
 
-:::
+### Agent Path
 
-### Configure Node.js Path
+Each agent has an **Auto-detect** button to help find the installation:
 
 1. Open **Settings → Agent Client**
-2. Enter the Node.js path in the **Node.js path** field
+2. Expand the agent section (Claude Code, Codex, Gemini CLI, etc.)
+3. Click **Auto-detect** next to the Path field
+4. The plugin will search common installation locations
 
-## Next Steps
-
-Continue to [Quick Start](./quick-start) to set up your first agent and start chatting!
+If auto-detect doesn't find your agent, manually enter the path or install it first.

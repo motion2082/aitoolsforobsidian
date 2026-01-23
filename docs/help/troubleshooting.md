@@ -1,6 +1,15 @@
 # Troubleshooting
 
-This guide covers common issues and solutions for Agent Client.
+This guide covers common issues and solutions for AI Tools for Obsidian.
+
+## Quick Fix: Use Auto-Detect
+
+If you're having path issues, try the **Auto-detect** button first:
+
+1. Open **Settings → Agent Client**
+2. Go to the relevant section (Node.js or agent section)
+3. Click **Auto-detect** next to the Path field
+4. The plugin will search for the installed executable
 
 ## Connection Issues
 
@@ -15,13 +24,10 @@ The plugin is trying to start the agent process but isn't receiving a response.
 
 **Solutions:**
 
-1. **Verify the agent path** in **Settings → Agent Client → [Agent Name] → Path**
-   - On macOS/Linux, find the path with: `which claude-code-acp`
-   - On Windows, find the path with: `where claude-code-acp`
-
-2. **Verify Node.js path** in **Settings → Agent Client → Node.js path**
-   - Many agents require Node.js
-   - Find it with: `which node` (macOS/Linux) or `where node` (Windows)
+1. **Use Auto-detect** for agent and Node.js paths in Settings
+2. **Verify manually** if auto-detect fails:
+   - On macOS/Linux: `which node` and `which <agent-name>`
+   - On Windows: `where.exe node` and `where.exe <agent-name>`
 
 3. **Reload the plugin** after changing path settings (disable then re-enable in Settings → Community plugins)
 
@@ -29,11 +35,24 @@ The plugin is trying to start the agent process but isn't receiving a response.
 
 The agent executable cannot be found at the specified path.
 
+**New! Enhanced error messages:** The plugin now provides detailed suggestions including installation commands.
+
 **Solutions:**
 
-1. Use the full absolute path (e.g., `/usr/local/bin/claude-code-acp` instead of just `claude-code-acp`)
-2. Verify the agent is installed by running it directly in Terminal
-3. On Windows, include the `.cmd` extension if needed
+1. **Use Auto-detect** in Settings to find the correct path
+2. **Install the agent** if not installed:
+   ```bash
+   # Claude Code
+   npm install -g @zed-industries/claude-code-acp
+
+   # Codex
+   npm install -g @zed-industries/codex-acp
+
+   # Gemini CLI
+   npm install -g @google/gemini-cli
+   ```
+3. Use the full absolute path (e.g., `/usr/local/bin/claude-code-acp` instead of just `claude-code-acp`)
+4. On Windows, include the `.cmd` extension if needed
 
 ## Authentication Issues
 
