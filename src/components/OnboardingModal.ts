@@ -1,6 +1,7 @@
 import { Modal, App, ButtonComponent, Setting } from "obsidian";
 import type AgentClientPlugin from "../plugin";
 import { getAgentInstallCommand } from "../shared/agent-installer";
+import { detectWsl, detectNodePath } from "../shared/path-detector";
 import { spawn } from "child_process";
 import { Platform } from "obsidian";
 
@@ -356,47 +357,59 @@ export class OnboardingModal extends Modal {
 		const packageName = installCommand.replace("npm install -g ", "");
 		let nodePath = this.plugin.settings.nodePath;
 
-		// Auto-detect Node.js path if not configured
-		if (!nodePath.trim()) {
-			console.warn(`[Onboarding] Node path not set, attempting auto-detect...`);
-			// Import and use path detector
-			try {
-				const { detectNodePath } = await import("../shared/path-detector");
-				const detected = detectNodePath();
-				if (detected?.path) {
-					nodePath = detected.path;
-					console.warn(`[Onboarding] Auto-detected Node.js: ${nodePath}`);
-				}
-			} catch (e) {
-				console.warn(`[Onboarding] Could not auto-detect Node.js: ${e}`);
+		// Auto-detect WSL if on Windows
+		let shouldUseWsl = false;
+		let wslDistribution: string | undefined;
+
+		if (Platform.isWin) {
+			const wslInfo = detectWsl();
+			if (wslInfo.isWsl && wslInfo.distribution) {
+				shouldUseWsl = true;
+				wslDistribution = wslInfo.distribution;
+				console.warn(`[Onboarding] Auto-detected WSL: ${wslDistribution}`);
 			}
 		}
 
-		const nodeDir = nodePath.trim()
+		// Auto-detect Node.js path if not configured (only for non-WSL)
+		if (!shouldUseWsl && !nodePath.trim()) {
+			console.warn(`[Onboarding] Node path not set, attempting auto-detect...`);
+			const detected = detectNodePath();
+			if (detected?.path) {
+				nodePath = detected.path;
+				console.warn(`[Onboarding] Auto-detected Node.js: ${nodePath}`);
+			}
+		}
+
+		const nodeDir = !shouldUseWsl && nodePath.trim()
 			? nodePath.trim().replace(/\/node$/, "")
 			: "";
 		const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
-
-		console.warn(`[Onboarding] Installing ${agent.name} (${packageName}) using ${npmExec}...`);
 
 		return new Promise((resolve) => {
 			let command: string;
 			let args: string[];
 			const installArgs = `${npmExec} install -g ${packageName}`;
 
-			if (Platform.isWin) {
+			if (shouldUseWsl && wslDistribution) {
+				// Use WSL
+				command = "wsl";
+				args = ["--distribution", wslDistribution, "-e", "bash", "-l", "-c", installArgs];
+				console.warn(`[Onboarding] Installing ${agent.name} (${packageName}) via WSL...`);
+			} else if (Platform.isWin) {
 				command = "cmd.exe";
 				args = ["/c", installArgs];
+				console.warn(`[Onboarding] Installing ${agent.name} (${packageName}) via Windows...`);
 			} else {
 				command = "/bin/bash";
 				args = ["-l", "-c", installArgs];
+				console.warn(`[Onboarding] Installing ${agent.name} (${packageName}) via bash...`);
 			}
 
 			const child = spawn(command, args, {
 				stdio: ["pipe", "pipe", "pipe"],
 				env: {
 					...process.env,
-					...(nodeDir && !Platform.isWin
+					...(nodeDir && !shouldUseWsl && !Platform.isWin
 						? { PATH: `${nodeDir}:${process.env.PATH || ""}` }
 						: {}),
 				},

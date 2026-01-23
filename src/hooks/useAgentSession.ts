@@ -18,7 +18,7 @@ import { toAgentConfig } from "../shared/settings-utils";
 import {
 	getAgentInstallCommand,
 } from "../shared/agent-installer";
-import { detectNodePath } from "../shared/path-detector";
+import { detectNodePath, detectWsl } from "../shared/path-detector";
 import { spawn } from "child_process";
 
 // ============================================================================
@@ -76,8 +76,21 @@ async function autoInstallAgent(
 		}
 	}
 
-	// Derive npm path from node path
-	const nodeDir = resolvedNodePath.trim()
+	// Auto-detect WSL if on Windows
+	let shouldUseWsl = wslMode;
+	let wslDist: string | undefined = wslDistribution;
+
+	if (!shouldUseWsl && process.platform === "win32") {
+		const wslInfo = detectWsl();
+		if (wslInfo.isWsl && wslInfo.distribution) {
+			shouldUseWsl = true;
+			wslDist = wslInfo.distribution;
+			console.warn(`[AutoInstall] Auto-detected WSL distribution: ${wslDist}`);
+		}
+	}
+
+	// Derive npm path from node path (only for non-WSL)
+	const nodeDir = !shouldUseWsl && resolvedNodePath.trim()
 		? resolvedNodePath.trim().replace(/\/node$/, "")
 		: "";
 	const npmExec = nodeDir ? `${nodeDir}/npm` : "npm";
@@ -89,10 +102,11 @@ async function autoInstallAgent(
 	let command: string;
 	let args: string[];
 
-	if (wslMode && wslDistribution) {
+	if (shouldUseWsl && wslDist) {
 		// Use WSL
 		command = "wsl";
-		args = ["--distribution", wslDistribution, "-e", "bash", "-l", "-c", installArgs];
+		args = ["--distribution", wslDist, "-e", "bash", "-l", "-c", installArgs];
+		console.warn(`[AutoInstall] Using WSL for installation`);
 	} else if (process.platform === "win32") {
 		// Windows without WSL
 		command = "cmd.exe";
@@ -103,11 +117,11 @@ async function autoInstallAgent(
 		args = ["-l", "-c", installArgs];
 	}
 
-	console.warn(`[AutoInstall] Installing ${agentId}...`);
+	console.warn(`[AutoInstall] Installing ${agentId} with: ${installArgs}`);
 
 	return new Promise((resolve) => {
 		const child = spawn(command, args, {
-			stdio: "inherit",
+			stdio: ["pipe", "pipe", "pipe"],
 			env: {
 				...process.env,
 				...(nodeDir && !wslMode
@@ -116,17 +130,45 @@ async function autoInstallAgent(
 			},
 		});
 
+		let output = "";
+		let hasTimeout = false;
+
+		// Timeout after 2 minutes
+		const timeout = setTimeout(() => {
+			hasTimeout = true;
+			console.error(`[AutoInstall] Installation timed out after 2 minutes`);
+			child.kill("SIGTERM");
+			resolve({ success: false, command: "" });
+		}, 120000);
+
+		child.stdout?.on("data", (data: unknown) => {
+			const text = typeof data === "string" ? data : String(data);
+			output += text;
+			console.warn(`[AutoInstall] npm stdout: ${text.substring(0, 200)}`);
+		});
+
+		child.stderr?.on("data", (data: unknown) => {
+			const text = typeof data === "string" ? data : String(data);
+			output += text;
+			console.warn(`[AutoInstall] npm stderr: ${text.substring(0, 200)}`);
+		});
+
 		child.on("close", (code: number) => {
+			clearTimeout(timeout);
+			if (hasTimeout) return;
+
 			if (code === 0) {
 				console.warn(`[AutoInstall] Successfully installed ${agentId}`);
 				resolve({ success: true, command: commandName });
 			} else {
-				console.error(`[AutoInstall] Failed to install ${agentId} (exit code: ${code})`);
+				console.error(`[AutoInstall] Failed to install ${agentId} (exit code: ${code}): ${output}`);
 				resolve({ success: false, command: "" });
 			}
 		});
 
 		child.on("error", (error) => {
+			clearTimeout(timeout);
+			if (hasTimeout) return;
 			console.error(`[AutoInstall] Error installing ${agentId}:`, error);
 			resolve({ success: false, command: "" });
 		});

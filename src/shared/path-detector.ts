@@ -10,6 +10,60 @@ export interface PathDetectionResult {
 }
 
 /**
+ * WSL detection result
+ */
+export interface WslDetectionResult {
+	isWsl: boolean;
+	distribution: string | null;
+}
+
+/**
+ * Detect if running in WSL and get the distribution name
+ */
+export function detectWsl(): WslDetectionResult {
+	// Check if running on Windows
+	if (!Platform.isWin) {
+		return { isWsl: false, distribution: null };
+	}
+
+	// Check for WSL indicator in the kernel version
+	try {
+		const result = spawnSync("wsl.exe", ["--list", "--quiet"], {
+			encoding: "utf-8",
+			timeout: 5000,
+		});
+
+		if (result.status === 0 && result.stdout) {
+			// Get the default distribution
+			const lines = result.stdout.trim().split(/\r?\n/);
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (trimmed && trimmed.length > 0) {
+					return { isWsl: true, distribution: trimmed };
+				}
+			}
+		}
+	} catch {
+		// WSL not available
+	}
+
+	// Alternative check: look for /mnt/c path which exists in WSL
+	try {
+		const result = spawnSync("test", ["-d", "/mnt/c"], {
+			encoding: "utf-8",
+			timeout: 1000,
+		});
+		if (result.status === 0) {
+			return { isWsl: true, distribution: "Ubuntu" }; // Default
+		}
+	} catch {
+		// Not WSL
+	}
+
+	return { isWsl: false, distribution: null };
+}
+
+/**
  * Common installation paths for Node.js and agents across platforms
  */
 const COMMON_NODE_PATHS: Record<string, string[]> = {
