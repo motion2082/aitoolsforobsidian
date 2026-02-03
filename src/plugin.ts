@@ -139,59 +139,69 @@ export default class AgentClientPlugin extends Plugin {
 	private _acpAdapter: AcpAdapter | null = null;
 
 	async onload() {
-		await this.loadSettings();
+		try {
+			await this.loadSettings();
 
-		// Initialize settings store
-		this.settingsStore = createSettingsStore(this.settings, this);
+			// Initialize settings store
+			this.settingsStore = createSettingsStore(this.settings, this);
 
-		// Show onboarding modal on first install
-		if (!this.settings.hasCompletedOnboarding) {
-			// Use setTimeout to ensure UI is ready
-			setTimeout(() => {
-				new OnboardingModal(this.app, this).open();
-			}, 100);
+			// Show onboarding modal on first install
+			if (!this.settings.hasCompletedOnboarding) {
+				// Use setTimeout to ensure UI is ready
+				setTimeout(() => {
+					new OnboardingModal(this.app, this).open();
+				}, 100);
+			}
+
+			this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
+
+			const ribbonIconEl = this.addRibbonIcon(
+				"bot-message-square",
+				"AI tools",
+				(_evt: MouseEvent) => {
+					void this.activateView();
+				},
+			);
+			ribbonIconEl.addClass("obsidianaitools-ribbon-icon");
+
+			this.addCommand({
+				id: "open-chat-view",
+				name: "Chat",
+				callback: () => {
+					void this.activateView();
+				},
+			});
+
+			// Register agent-specific commands
+			this.registerAgentCommands();
+			this.registerPermissionCommands();
+
+			this.addSettingTab(new AgentClientSettingTab(this.app, this));
+
+			// Clean up ACP session when Obsidian quits
+			// Note: We don't wait for disconnect to complete to avoid blocking quit
+			this.registerEvent(
+				this.app.workspace.on("quit", () => {
+					if (this._acpAdapter) {
+						// Fire and forget - don't block Obsidian from quitting
+						this._acpAdapter.disconnect().catch((error) => {
+							console.warn(
+								"[AgentClient] Quit cleanup error:",
+								error,
+							);
+						});
+					}
+				}),
+			);
+		} catch (error) {
+			console.error("[AI Tools] Failed to initialize plugin:", error);
+			new Notice(
+				"AI Tools failed to initialize. Check console for details.",
+				5000,
+			);
+			// Still throw to let Obsidian know initialization failed
+			throw error;
 		}
-
-		this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
-
-		const ribbonIconEl = this.addRibbonIcon(
-			"bot-message-square",
-			"AI tools",
-			(_evt: MouseEvent) => {
-				void this.activateView();
-			},
-		);
-		ribbonIconEl.addClass("obsidianaitools-ribbon-icon");
-
-		this.addCommand({
-			id: "open-chat-view",
-			name: "Chat",
-			callback: () => {
-				void this.activateView();
-			},
-		});
-
-		// Register agent-specific commands
-		this.registerAgentCommands();
-		this.registerPermissionCommands();
-
-		this.addSettingTab(new AgentClientSettingTab(this.app, this));
-
-		// Clean up ACP session when Obsidian quits
-		// Note: We don't wait for disconnect to complete to avoid blocking quit
-		this.registerEvent(
-			this.app.workspace.on("quit", () => {
-				if (this._acpAdapter) {
-					// Fire and forget - don't block Obsidian from quitting
-					this._acpAdapter.disconnect().catch((error) => {
-						console.warn(
-							"[AgentClient] Quit cleanup error:",
-							error,
-						);
-					});
-				}
-			}),
-		);
 	}
 
 	onunload() {}
