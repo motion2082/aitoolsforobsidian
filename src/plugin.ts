@@ -141,6 +141,12 @@ export default class AgentClientPlugin extends Plugin {
 	async onload() {
 		try {
 			console.log("[AI Tools] Loading plugin...");
+
+			// Register view FIRST (synchronous) - must happen before any async
+			// operations so Obsidian can restore saved workspace layout immediately
+			this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
+			console.log("[AI Tools] View registered");
+
 			await this.loadSettings();
 			console.log("[AI Tools] Settings loaded successfully");
 
@@ -160,8 +166,6 @@ export default class AgentClientPlugin extends Plugin {
 					}
 				}, 100);
 			}
-
-			this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
 
 			const ribbonIconEl = this.addRibbonIcon(
 				"bot-message-square",
