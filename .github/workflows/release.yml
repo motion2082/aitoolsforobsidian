@@ -1,4 +1,4 @@
-name: Release
+name: Release + Minor Version Increment
 
 on:
   push:
@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Git
         run: |
@@ -27,17 +29,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bump version
+        run: |
+          git fetch --tags
+          # Get current version and increment minor
+          current=$(node -p 'require("./package.json").version')
+          # Extract major.minor.patch
+          read major minor patch <<<$(echo $current | tr '.' ' ')
+          new_minor=$((minor + 1))
+          new_version="$major.$new_minor.0"
+          # Set the version for npm and run the version bump script
+          export npm_package_version=$new_version
+          node version-bump.mjs
+          git add package.json manifest.json versions.json
+          git commit -m "Release v$new_version"
+          git tag "v$new_version"
+          git push
+          git push --tags
+
       - name: Build plugin
         run: npm run build
 
       - name: Get version from package.json
         id: version
         run: echo "version=$(node -p 'require("./package.json").version')" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        run: |
-          git tag "v${{ steps.version.outputs.version }}"
-          git push "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git" --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -46,8 +61,9 @@ jobs:
             main.js
             manifest.json
             styles.css
-          name: "v${{ steps.version.outputs.version }}"
+          name: "Release v${{ steps.version.outputs.version }}"
           generate_release_notes: true
           tag_name: "v${{ steps.version.outputs.version }}"
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
