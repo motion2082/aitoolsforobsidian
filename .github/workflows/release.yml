@@ -77,5 +77,6 @@ jobs:
           generate_release_notes: true
           tag_name: "v${{ steps.version.outputs.version }}"
           draft: false
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
