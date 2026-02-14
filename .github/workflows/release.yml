@@ -48,6 +48,9 @@ jobs:
             echo "Auto-incrementing from $current to $new_version"
           fi
 
+          # Update package.json version
+          node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json')); p.version='$new_version'; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+
           # Set the version for npm and run the version bump script
           export npm_package_version=$new_version
           node version-bump.mjs
