@@ -95,7 +95,7 @@ Added a "Thinking..." label to the loading indicator that appears when the agent
 **`styles.css`**
 - Added `.obsidianaitools-loading-label` style: muted italic text with fade-in animation.
 
-## Enhanced Loading Indicator (February 15, 2026)
+## Enhanced Loading Indicator (February 16, 2026)
 
 Expanded the loading indicator to show phase-specific labels and an elapsed timer, giving users better feedback during long operations instead of just an animated dot grid.
 
@@ -123,3 +123,6 @@ Expanded the loading indicator to show phase-specific labels and an elapsed time
 - On next Obsidian reload, orphaned session files in `sessions/` will be detected and their metadata rebuilt into `savedSessions`.
 - Existing sessions with valid metadata are not duplicated (checked via `existingIds` Set).
 - Session history duplicate button now shows copy icon with "Duplicate session" tooltip.
+- Loading indicator shows phase-specific labels and elapsed timer.
+- "Waiting for approval..." appears when permission request is active.
+- Committed as `f87023c` on master.
