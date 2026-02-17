@@ -556,6 +556,7 @@ If your plugin does not need CSS, delete this file.
 	word-wrap: break-word;
 	word-break: break-all;
 	overflow-wrap: anywhere;
+	white-space: pre-wrap;
 }
 
 .obsidianaitools-chat-error-suggestion {
