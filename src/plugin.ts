@@ -235,8 +235,14 @@ export default class AgentClientPlugin extends Plugin {
 		}
 	}
 
-	onunload() {}
-
+	onunload() {
+		if (this._acpAdapter) {
+			// Fire and forget, but ensure we kill subprocesses
+			this._acpAdapter.disconnect().catch((error) => {
+				console.warn("[AgentClient] Unload cleanup error:", error);
+			});
+		}
+	}
 	getOrCreateAdapter(): AcpAdapter {
 		if (!this._acpAdapter) {
 			this._acpAdapter = new AcpAdapter(this);

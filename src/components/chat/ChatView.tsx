@@ -615,6 +615,18 @@ function ChatComponent({
 	autoExportRef.current = autoExport;
 	closeSessionRef.current = agentSession.closeSession;
 
+	// Refs for stable onSessionUpdate callback (avoid mid-stream re-registration)
+	const sessionIdRef = useRef(session.sessionId);
+	const isLoadingSessionHistoryRef = useRef(isLoadingSessionHistory);
+	const handleSessionUpdateRef = useRef(chat.handleSessionUpdate);
+	const updateAvailableCommandsRef = useRef(agentSession.updateAvailableCommands);
+	const updateCurrentModeRef = useRef(agentSession.updateCurrentMode);
+	sessionIdRef.current = session.sessionId;
+	isLoadingSessionHistoryRef.current = isLoadingSessionHistory;
+	handleSessionUpdateRef.current = chat.handleSessionUpdate;
+	updateAvailableCommandsRef.current = agentSession.updateAvailableCommands;
+	updateCurrentModeRef.current = agentSession.updateCurrentMode;
+
 	// Cleanup on unmount only - auto-export and close session
 	useEffect(() => {
 		return () => {
@@ -660,48 +672,40 @@ function ChatComponent({
 	// ============================================================
 	// Effects - ACP Adapter Callbacks
 	// ============================================================
-	// Register unified session update callback
+	// Register unified session update callback (stable - uses refs to avoid mid-stream re-registration)
 	useEffect(() => {
 		acpAdapter.onSessionUpdate((update) => {
 			// Filter by sessionId - ignore updates from old sessions
-			if (session.sessionId && update.sessionId !== session.sessionId) {
+			if (sessionIdRef.current && update.sessionId !== sessionIdRef.current) {
 				logger.log(
-					`[ChatView] Ignoring update for old session: ${update.sessionId} (current: ${session.sessionId})`,
+					`[ChatView] Ignoring update for old session: ${update.sessionId} (current: ${sessionIdRef.current})`,
 				);
 				return;
 			}
 
 			// During session/load, ignore history replay messages but process session-level updates
-			if (isLoadingSessionHistory) {
+			if (isLoadingSessionHistoryRef.current) {
 				// Only process session-level updates during load
 				if (update.type === "available_commands_update") {
-					agentSession.updateAvailableCommands(update.commands);
+					updateAvailableCommandsRef.current(update.commands);
 				} else if (update.type === "current_mode_update") {
-					agentSession.updateCurrentMode(update.currentModeId);
+					updateCurrentModeRef.current(update.currentModeId);
 				}
 				// Ignore all message-related updates (history replay)
 				return;
 			}
 
 			// Route message-related updates to useChat
-			chat.handleSessionUpdate(update);
+			handleSessionUpdateRef.current(update);
 
 			// Route session-level updates to useAgentSession
 			if (update.type === "available_commands_update") {
-				agentSession.updateAvailableCommands(update.commands);
+				updateAvailableCommandsRef.current(update.commands);
 			} else if (update.type === "current_mode_update") {
-				agentSession.updateCurrentMode(update.currentModeId);
+				updateCurrentModeRef.current(update.currentModeId);
 			}
 		});
-	}, [
-		acpAdapter,
-		session.sessionId,
-		logger,
-		isLoadingSessionHistory,
-		chat.handleSessionUpdate,
-		agentSession.updateAvailableCommands,
-		agentSession.updateCurrentMode,
-	]);
+	}, [acpAdapter, logger]);
 
 	// Register updateMessage callback for permission UI updates
 	useEffect(() => {
