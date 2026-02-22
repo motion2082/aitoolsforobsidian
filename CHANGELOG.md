@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminal manager schedules a 5-minute fallback cleanup timer on process exit in case the agent never calls `releaseTerminal`, preventing memory leaks from stale terminal entries
 - `releaseTerminal()` now clears any existing fallback timeout before scheduling its 30-second grace period
 - Added spawn error handler in agent installer to report process failures (e.g. npm not found) via the progress callback
+- Stabilized `onSessionUpdate` callback registration using refs to prevent mid-stream re-registration that could cause agent response text to vanish
 
 ## [0.7.3] - 2026-02-11
 
