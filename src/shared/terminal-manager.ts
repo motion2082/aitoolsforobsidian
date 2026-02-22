@@ -174,6 +174,16 @@ export class TerminalManager {
 			// Resolve all waiting promises
 			terminal.waitPromises.forEach((resolve) => resolve(exitStatus));
 			terminal.waitPromises = [];
+
+			// Schedule a fallback cleanup (e.g. 5 minutes) in case the agent never calls releaseTerminal
+			if (!terminal.cleanupTimeout) {
+				terminal.cleanupTimeout = window.setTimeout(() => {
+					this.logger.log(
+						`[Terminal ${terminalId}] Cleaning up stale terminal via fallback timer`,
+					);
+					this.terminals.delete(terminalId);
+				}, 300000); // 5 minutes
+			}
 		});
 
 		this.terminals.set(terminalId, terminal);
@@ -252,6 +262,11 @@ export class TerminalManager {
 		this.logger.log(`[Terminal ${terminalId}] Releasing terminal`);
 		if (!terminal.exitStatus) {
 			terminal.process.kill("SIGTERM");
+		}
+
+		// Clear any existing fallback timeout before scheduling the shorter grace period
+		if (terminal.cleanupTimeout) {
+			window.clearTimeout(terminal.cleanupTimeout);
 		}
 
 		// Schedule cleanup after 30 seconds to allow UI to poll final output

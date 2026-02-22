@@ -102,6 +102,10 @@ export function installAgent(
 		env,
 	});
 
+	childProcess.on("error", (error) => {
+		onOutput?.(`Installation process error: ${error.message}\n`);
+	});
+
 	childProcess.stdout?.on("data", (data: unknown) => {
 		const text = typeof data === "string" ? data : String(data);
 		onOutput?.(text);

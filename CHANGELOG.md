@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-02-22
+
+### Fixed
+- Plugin `onunload()` now disconnects the ACP adapter and kills agent subprocesses when the plugin is disabled or reloaded
+- ACP adapter `initialize()` now kills the spawned agent process if initialization fails or times out, preventing orphaned processes
+- ACP adapter `initialize()` now clears the 30-second timeout timer on success and nulls the connection reference on failure
+- Added error handler on stdout `ReadableStream` to prevent unhandled errors when the agent process crashes
+- Terminal manager schedules a 5-minute fallback cleanup timer on process exit in case the agent never calls `releaseTerminal`, preventing memory leaks from stale terminal entries
+- `releaseTerminal()` now clears any existing fallback timeout before scheduling its 30-second grace period
+- Added spawn error handler in agent installer to report process failures (e.g. npm not found) via the progress callback
+
 ## [0.7.3] - 2026-02-11
 
 ### Added
@@ -38,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - VitePress version compatibility
 
-[Unreleased]: https://github.com/UltimateAI-org/aitoolsforobsidian/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/UltimateAI-org/aitoolsforobsidian/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/UltimateAI-org/aitoolsforobsidian/compare/v0.8.2...v0.8.3
 [0.7.3]: https://github.com/UltimateAI-org/aitoolsforobsidian/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/UltimateAI-org/aitoolsforobsidian/releases/tag/v0.7.2

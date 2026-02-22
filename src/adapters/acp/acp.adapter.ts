@@ -450,6 +450,9 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				stdout.on("end", () => {
 					controller.close();
 				});
+				stdout.on("error", (err) => {
+					controller.error(err);
+				});
 			},
 		});
 
@@ -481,8 +484,9 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				},
 			});
 
-			const timeoutPromise = new Promise<never>((_, reject) => {
-				setTimeout(() => {
+			let initTimeoutId: ReturnType<typeof setTimeout>;
+		const timeoutPromise = new Promise<never>((_, reject) => {
+				initTimeoutId = setTimeout(() => {
 					const causes: string[] = [];
 
 					// Suggest install command for known agents
@@ -514,6 +518,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			});
 
 			const initResult = await Promise.race([initPromise, timeoutPromise]);
+			clearTimeout(initTimeoutId!);
 
 			this.logger.log(
 				`[AcpAdapter] ✅ Connected to agent (protocol v${initResult.protocolVersion})`,
@@ -582,7 +587,15 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		} catch (error) {
 			this.logger.error("[AcpAdapter] Initialization Error:", error);
 
-			// Reset flags on failure
+			// Force kill the process if initialization failed
+			if (this.agentProcess) {
+				this.logger.log(`[AcpAdapter] Killing orphaned process on init failure (PID: ${this.agentProcess.pid})`);
+				this.agentProcess.kill();
+				this.agentProcess = null;
+			}
+
+			// Clean up connection and reset flags on failure
+			this.connection = null;
 			this.isInitializedFlag = false;
 			this.currentAgentId = null;
 
