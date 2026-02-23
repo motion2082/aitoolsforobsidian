@@ -143,21 +143,30 @@ export class OnboardingModal extends Modal {
 		if (this.selectedAgent) {
 			settings.activeAgentId = this.selectedAgent.id;
 
-			// Auto-detect the installed agent's full path with retry logic
-			// On Windows, there can be a delay after npm install before the .cmd file is accessible
-			let detectedPath = detectAgentPath(this.selectedAgent.id);
-			let retries = 0;
-			const maxRetries = 3;
+			// Only trust agent path detection if Node.js is available.
+			// Stale .cmd stubs persist in %APPDATA%\npm after Node.js is uninstalled.
+			const nodeAvailable = detectNodePath();
+			let agentPath = this.getAgentBinaryName(this.selectedAgent.id);
 
-			while (!detectedPath.path && retries < maxRetries) {
-				console.warn(`[Onboarding] Path detection attempt ${retries + 1} failed, retrying in 1s...`);
-				await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-				detectedPath = detectAgentPath(this.selectedAgent.id);
-				retries++;
+			if (nodeAvailable.path) {
+				// Auto-detect the installed agent's full path with retry logic
+				// On Windows, there can be a delay after npm install before the .cmd file is accessible
+				let detectedPath = detectAgentPath(this.selectedAgent.id);
+				let retries = 0;
+				const maxRetries = 3;
+
+				while (!detectedPath.path && retries < maxRetries) {
+					console.warn(`[Onboarding] Path detection attempt ${retries + 1} failed, retrying in 1s...`);
+					await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+					detectedPath = detectAgentPath(this.selectedAgent.id);
+					retries++;
+				}
+
+				agentPath = detectedPath.path || agentPath;
+				console.warn(`[Onboarding] Detected agent path: ${agentPath} (wasAutoDetected: ${detectedPath.wasAutoDetected})`);
+			} else {
+				console.warn(`[Onboarding] Node.js not available — saving bare binary name: ${agentPath}`);
 			}
-
-			// Fallback to the actual binary name (not the internal ID) if auto-detect fails
-			const agentPath = detectedPath.path || this.getAgentBinaryName(this.selectedAgent.id);
 
 			if (this.selectedAgent.id === "claude-code-acp") {
 				settings.claude.command = agentPath;
@@ -166,8 +175,6 @@ export class OnboardingModal extends Modal {
 			} else if (this.selectedAgent.id === "gemini-cli") {
 				settings.gemini.command = agentPath;
 			}
-
-			console.warn(`[Onboarding] Detected agent path: ${agentPath} (wasAutoDetected: ${detectedPath.wasAutoDetected})`);
 		}
 
 		// Mark onboarding as complete
@@ -875,12 +882,19 @@ export class OnboardingModal extends Modal {
 			return { success: false, error };
 		}
 
-		// Check if agent is already installed
+		// Check if agent is already installed — but only trust it if Node.js is also available.
+		// On Windows, npm global .cmd stubs persist after Node.js is uninstalled, so existsSync
+		// finds the file but it can't actually run without Node.js.
 		const alreadyInstalled = detectAgentPath(agent.id);
 		if (alreadyInstalled.path) {
-			console.warn(`[Onboarding] ${agent.name} is already installed at: ${alreadyInstalled.path}`);
-			onOutput?.(`✓ ${agent.name} is already installed at: ${alreadyInstalled.path}\n\nSkipping installation...\n`);
-			return { success: true };
+			const nodeAvailable = detectNodePath();
+			if (nodeAvailable.path) {
+				console.warn(`[Onboarding] ${agent.name} is already installed at: ${alreadyInstalled.path}`);
+				onOutput?.(`✓ ${agent.name} is already installed at: ${alreadyInstalled.path}\n\nSkipping installation...\n`);
+				return { success: true };
+			} else {
+				console.warn(`[Onboarding] Agent stub found at ${alreadyInstalled.path} but Node.js is not available — proceeding with install`);
+			}
 		}
 
 		const packageName = installCommand.replace("npm install -g ", "");
@@ -1007,8 +1021,10 @@ export class OnboardingModal extends Modal {
 
 				// Check if agent was actually installed, regardless of exit code
 				// npm can return non-zero exit codes even on successful installs if there are warnings
+				// Also verify Node.js exists — stale .cmd stubs from a previous install can fool existsSync
 				const installed = detectAgentPath(agent.id);
-				const wasInstalled = installed.path !== null;
+				const nodeAvailable = detectNodePath();
+				const wasInstalled = installed.path !== null && nodeAvailable.path !== null;
 
 				if (code === 0 || wasInstalled) {
 					if (wasInstalled) {
