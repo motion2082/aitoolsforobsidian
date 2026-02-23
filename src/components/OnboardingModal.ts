@@ -882,21 +882,10 @@ export class OnboardingModal extends Modal {
 			return { success: false, error };
 		}
 
-		// Check if agent is already installed — but only trust it if Node.js is also available.
-		// On Windows, npm global .cmd stubs persist after Node.js is uninstalled, so existsSync
-		// finds the file but it can't actually run without Node.js.
-		const alreadyInstalled = detectAgentPath(agent.id);
-		if (alreadyInstalled.path) {
-			const nodeAvailable = detectNodePath();
-			if (nodeAvailable.path) {
-				console.warn(`[Onboarding] ${agent.name} is already installed at: ${alreadyInstalled.path}`);
-				onOutput?.(`✓ ${agent.name} is already installed at: ${alreadyInstalled.path}\n\nSkipping installation...\n`);
-				return { success: true };
-			} else {
-				console.warn(`[Onboarding] Agent stub found at ${alreadyInstalled.path} but Node.js is not available — proceeding with install`);
-			}
-		}
-
+		// Always run npm install -g even if the agent binary already exists.
+		// On Windows, stale .cmd stubs and broken node_modules can persist after
+		// Node.js reinstalls. npm install -g is fast for already-installed packages
+		// and repairs broken installs.
 		const packageName = installCommand.replace("npm install -g ", "");
 		let nodePath = this.plugin.settings.nodePath;
 
