@@ -1,4 +1,5 @@
 import { spawnSync } from "child_process";
+import { homedir } from "os";
 import { Platform } from "obsidian";
 
 /**
@@ -102,6 +103,9 @@ const COMMON_AGENT_PATHS: Record<string, string[]> = {
 		"/usr/local/bin/claude-code-acp",
 		"/usr/local/bin/codex-acp",
 		"/usr/local/bin/gemini",
+		`${homedir()}/.npm-global/bin/claude-code-acp`,
+		`${homedir()}/.npm-global/bin/codex-acp`,
+		`${homedir()}/.npm-global/bin/gemini`,
 	],
 	// Windows
 	win32: [

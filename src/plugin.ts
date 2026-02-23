@@ -69,8 +69,6 @@ export interface AgentClientPluginSettings {
 	savedSessions: SavedSessionInfo[];
 	// Onboarding state
 	hasCompletedOnboarding: boolean;
-	// Auto-install missing agents
-	autoInstallAgents: boolean;
 	// Global API configuration
 	apiKey: string;
 	baseUrl: string;
@@ -126,7 +124,6 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	},
 	savedSessions: [],
 	hasCompletedOnboarding: false,
-	autoInstallAgents: true,
 	apiKey: "",
 	baseUrl: "https://chat.obsidianaitools.com",
 	model: "MiniMax-M2.1",
@@ -626,10 +623,6 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.hasCompletedOnboarding === "boolean"
 					? rawSettings.hasCompletedOnboarding
 					: DEFAULT_SETTINGS.hasCompletedOnboarding,
-			autoInstallAgents:
-				typeof rawSettings.autoInstallAgents === "boolean"
-					? rawSettings.autoInstallAgents
-					: DEFAULT_SETTINGS.autoInstallAgents,
 			// Global API configuration
 			apiKey:
 				typeof rawSettings.apiKey === "string"

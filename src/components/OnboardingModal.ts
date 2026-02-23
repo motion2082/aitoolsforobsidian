@@ -42,14 +42,14 @@ export class OnboardingModal extends Modal {
 			name: "Claude Code",
 			provider: "Anthropic",
 			package: "@zed-industries/claude-code-acp",
-			description: "Popular for general coding tasks",
+			description: "Recommended — full tool support",
 		},
 		{
 			id: "gemini-cli",
 			name: "Gemini CLI",
 			provider: "Google",
 			package: "@google/gemini-cli",
-			description: "Fast and versatile AI assistant",
+			description: "Experimental — limited tool support",
 		},
 		// Note: Codex/OpenCode is currently in development
 		// {
@@ -134,8 +134,6 @@ export class OnboardingModal extends Modal {
 		// Normalize URL: trim and remove trailing slash
 		const normalizedUrl = this.baseUrl.trim().replace(/\/$/, "");
 		settings.baseUrl = normalizedUrl || "https://chat.obsidianaitools.com";
-		settings.autoInstallAgents = true;
-
 		// Save detected Node.js path so user doesn't have to configure it manually
 		if (this.detectedNodePath) {
 			settings.nodePath = this.detectedNodePath;
@@ -381,10 +379,50 @@ export class OnboardingModal extends Modal {
 				cls: "obsidianaitools-onboarding-error-header",
 			});
 
-			// Check if it's a missing npm error
+			// Check error type
 			const isNpmMissing = this.installErrorMessage.toLowerCase().includes("node.js and npm");
+			const isPermissionError = this.installErrorMessage.includes("NPM_PERMISSION_ERROR");
 
-			if (isNpmMissing) {
+			if (isPermissionError) {
+				// Show npm global permissions fix for Linux users
+				const actionDiv = errorDiv.createDiv({
+					cls: "obsidianaitools-onboarding-error-action",
+				});
+
+				actionDiv.createEl("p", {
+					text: "npm does not have permission to install global packages. This is common on Linux when Node.js is installed via a system package manager.",
+					cls: "obsidianaitools-onboarding-error-action-text",
+				});
+
+				actionDiv.createEl("p", {
+					text: "To fix this, run these commands in your terminal:",
+					cls: "obsidianaitools-onboarding-error-action-header",
+				});
+
+				const commands = [
+					"mkdir -p ~/.npm-global",
+					"npm config set prefix '~/.npm-global'",
+					"echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc",
+					"source ~/.bashrc",
+				];
+
+				const codeBlock = actionDiv.createEl("pre", {
+					cls: "obsidianaitools-onboarding-error-codeblock",
+				});
+				codeBlock.createEl("code", {
+					text: commands.join("\n"),
+				});
+
+				actionDiv.createEl("p", {
+					text: "If you use zsh or fish, update your shell config file instead of ~/.bashrc.",
+					cls: "obsidianaitools-onboarding-error-action-text",
+				});
+
+				actionDiv.createEl("p", {
+					text: "Then click 'Retry Installation' below.",
+					cls: "obsidianaitools-onboarding-error-alternative",
+				});
+			} else if (isNpmMissing) {
 				// Show prominent installation instructions for missing npm
 				const actionDiv = errorDiv.createDiv({
 					cls: "obsidianaitools-onboarding-error-action",
@@ -599,10 +637,39 @@ export class OnboardingModal extends Modal {
 						cls: "obsidianaitools-onboarding-error-header",
 					});
 
-				// Check if it's a Node.js missing error with URL
+				// Check error type
 				const isNodeMissing = this.installErrorMessage.includes("https://nodejs.org/en/download");
+				const isPermError = this.installErrorMessage.includes("NPM_PERMISSION_ERROR");
 
-				if (isNodeMissing) {
+				if (isPermError) {
+					// Show npm global permissions fix
+					errorDiv.createEl("p", {
+						text: "npm does not have permission to install global packages. This is common on Linux when Node.js is installed via a system package manager.",
+						cls: "obsidianaitools-onboarding-error-message",
+					});
+
+					const fixDiv = errorDiv.createDiv({
+						cls: "obsidianaitools-onboarding-error-help",
+					});
+					fixDiv.createEl("p", { text: "Run these commands in your terminal to fix this:" });
+
+					const commands = [
+						"mkdir -p ~/.npm-global",
+						"npm config set prefix '~/.npm-global'",
+						"echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc",
+						"source ~/.bashrc",
+					];
+
+					const codeBlock = fixDiv.createEl("pre", {
+						cls: "obsidianaitools-onboarding-error-codeblock",
+					});
+					codeBlock.createEl("code", {
+						text: commands.join("\n"),
+					});
+
+					fixDiv.createEl("p", { text: "If you use zsh or fish, update your shell config file instead of ~/.bashrc." });
+					fixDiv.createEl("p", { text: "Then click 'Retry Installation' below." });
+				} else if (isNodeMissing) {
 					// Split message to make URL clickable
 					const parts = this.installErrorMessage.split("https://nodejs.org/en/download");
 					const messagePara = errorDiv.createEl("p", {
@@ -625,6 +692,7 @@ export class OnboardingModal extends Modal {
 					});
 				}
 
+				if (!isPermError) {
 					const helpDiv = errorDiv.createDiv({
 						cls: "obsidianaitools-onboarding-error-help",
 					});
@@ -642,6 +710,7 @@ export class OnboardingModal extends Modal {
 							cls: "obsidianaitools-onboarding-error-command",
 						});
 					}
+				}
 
 					// Insert error div before terminal
 					terminalContainer.parentElement?.insertBefore(errorDiv, terminalContainer);
@@ -892,7 +961,7 @@ export class OnboardingModal extends Modal {
 					if (outputLower.includes("npm") && (outputLower.includes("not recognized") || outputLower.includes("command not found") || outputLower.includes("not found"))) {
 						errorMsg = "Node.js and npm are not installed or not in your system PATH.\n\nPlease install Node.js from: https://nodejs.org/en/download\n\nAfter installing, restart Obsidian and try again.";
 					} else if (outputLower.includes("eacces") || outputLower.includes("permission denied")) {
-						errorMsg = "Permission denied. Try running Obsidian as administrator, or install the agent manually:\n\nnpm install -g " + packageName;
+						errorMsg = "NPM_PERMISSION_ERROR: Permission denied when installing globally.";
 					} else if (outputLower.includes("enotfound") || outputLower.includes("network")) {
 						errorMsg = "Network error. Please check your internet connection and try again.";
 					} else {
