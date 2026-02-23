@@ -1,5 +1,7 @@
 import { spawnSync } from "child_process";
+import { existsSync } from "fs";
 import { homedir } from "os";
+import { join } from "path";
 import { Platform } from "obsidian";
 
 /**
@@ -112,12 +114,14 @@ const COMMON_AGENT_PATHS: Record<string, string[]> = {
 		`${homedir()}/.npm-global/bin/codex-acp`,
 		`${homedir()}/.npm-global/bin/gemini`,
 	],
-	// Windows
+	// Windows — use process.env.APPDATA for the actual user path
 	win32: [
-		"C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\claude-agent-acp.cmd",
-		"C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\claude-code-acp.cmd",
-		"C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\codex-acp.cmd",
-		"C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\gemini.cmd",
+		...(process.env.APPDATA ? [
+			join(process.env.APPDATA, "npm", "claude-agent-acp.cmd"),
+			join(process.env.APPDATA, "npm", "claude-code-acp.cmd"),
+			join(process.env.APPDATA, "npm", "codex-acp.cmd"),
+			join(process.env.APPDATA, "npm", "gemini.cmd"),
+		] : []),
 	],
 };
 
@@ -228,16 +232,9 @@ export function detectAgentPath(agentId: string): PathDetectionResult {
 /**
  * Check if a file exists at the given path
  */
-function pathExists(path: string): boolean {
+function pathExists(filePath: string): boolean {
 	try {
-		const result = spawnSync(Platform.isWin ? "cmd.exe" : "test", [
-			Platform.isWin ? "/c" : "-e",
-			path,
-		], {
-			encoding: "utf-8",
-			timeout: 1000,
-		});
-		return result.status === 0;
+		return existsSync(filePath);
 	} catch {
 		return false;
 	}

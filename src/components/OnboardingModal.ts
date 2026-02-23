@@ -156,7 +156,8 @@ export class OnboardingModal extends Modal {
 				retries++;
 			}
 
-			const agentPath = detectedPath.path || this.selectedAgent.id; // Fallback to command name if not found
+			// Fallback to the actual binary name (not the internal ID) if auto-detect fails
+			const agentPath = detectedPath.path || this.getAgentBinaryName(this.selectedAgent.id);
 
 			if (this.selectedAgent.id === "claude-code-acp") {
 				settings.claude.command = agentPath;
@@ -223,10 +224,11 @@ export class OnboardingModal extends Modal {
 	}
 
 	private createAgentCard(parent: HTMLElement, agent: AgentOption) {
+		const isRecommended = agent.id === "claude-code-acp";
 		const card = parent.createDiv({
 			cls: `obsidianaitools-onboarding-card ${
 				this.selectedAgent?.id === agent.id ? "selected" : ""
-			}`,
+			} ${isRecommended ? "recommended" : ""}`,
 		});
 		card.onclick = () => {
 			this.selectedAgent = agent;
@@ -374,10 +376,21 @@ export class OnboardingModal extends Modal {
 				cls: "obsidianaitools-onboarding-error",
 			});
 
-			errorDiv.createEl("p", {
+			const errorHeader = errorDiv.createDiv({
+				cls: "obsidianaitools-onboarding-error-header-row",
+			});
+			errorHeader.createEl("p", {
 				text: "Installation Failed",
 				cls: "obsidianaitools-onboarding-error-header",
 			});
+			const dismissBtn = errorHeader.createEl("button", {
+				text: "×",
+				cls: "obsidianaitools-onboarding-error-dismiss",
+			});
+			dismissBtn.onclick = () => {
+				this.installErrorMessage = "";
+				errorDiv.remove();
+			};
 
 			// Check error type
 			const isNpmMissing = this.installErrorMessage.toLowerCase().includes("node.js and npm");
@@ -443,14 +456,28 @@ export class OnboardingModal extends Modal {
 				});
 
 				const step1 = stepsList.createEl("li");
-				step1.createEl("strong").setText("Download Node.js: ");
-				const link = step1.createEl("a", {
-					text: "https://nodejs.org/en/download",
+				step1.createEl("strong").setText("Install Node.js ");
+				if (Platform.isWin) {
+					step1.appendText("via terminal: ");
+					step1.createEl("code", { text: "winget install OpenJS.NodeJS.LTS" });
+				} else if (Platform.isMacOS) {
+					step1.appendText("via terminal: ");
+					step1.createEl("code", { text: "brew install node" });
+				} else {
+					step1.appendText("via terminal: ");
+					step1.createEl("code", { text: "sudo apt install nodejs npm" });
+					step1.appendText(" (Debian/Ubuntu) or ");
+					step1.createEl("code", { text: "sudo pacman -S nodejs npm" });
+					step1.appendText(" (Arch)");
+				}
+
+				const step1alt = stepsList.createEl("li");
+				step1alt.appendText("Or download from ");
+				const link = step1alt.createEl("a", {
+					text: "nodejs.org",
 					href: "https://nodejs.org/en/download",
 				});
 				link.setAttribute("target", "_blank");
-
-				stepsList.createEl("li", { text: "Install Node.js (it includes npm automatically)" });
 
 				const restartLi = stepsList.createEl("li");
 				restartLi.createEl("strong").setText("Restart your computer");
@@ -670,20 +697,40 @@ export class OnboardingModal extends Modal {
 					fixDiv.createEl("p", { text: "If you use zsh or fish, update your shell config file instead of ~/.bashrc." });
 					fixDiv.createEl("p", { text: "Then click 'Retry Installation' below." });
 				} else if (isNodeMissing) {
-					// Split message to make URL clickable
-					const parts = this.installErrorMessage.split("https://nodejs.org/en/download");
-					const messagePara = errorDiv.createEl("p", {
+					// Show platform-specific install command
+					errorDiv.createEl("p", {
+						text: "Node.js is required but not installed on your system.",
 						cls: "obsidianaitools-onboarding-error-message",
 					});
-					messagePara.appendText(parts[0]);
-					const link = messagePara.createEl("a", {
-						text: "https://nodejs.org/en/download",
+
+					const installHint = errorDiv.createEl("p", {
+						cls: "obsidianaitools-onboarding-error-message",
+					});
+					installHint.createEl("strong").setText("Quick install: ");
+					if (Platform.isWin) {
+						installHint.createEl("code", { text: "winget install OpenJS.NodeJS.LTS" });
+					} else if (Platform.isMacOS) {
+						installHint.createEl("code", { text: "brew install node" });
+					} else {
+						installHint.createEl("code", { text: "sudo apt install nodejs npm" });
+						installHint.appendText(" or ");
+						installHint.createEl("code", { text: "sudo pacman -S nodejs npm" });
+					}
+
+					const dlPara = errorDiv.createEl("p", {
+						cls: "obsidianaitools-onboarding-error-message",
+					});
+					dlPara.appendText("Or download from ");
+					const dlLink = dlPara.createEl("a", {
+						text: "nodejs.org",
 						href: "https://nodejs.org/en/download",
 					});
-					link.setAttribute("target", "_blank");
-					if (parts[1]) {
-						messagePara.appendText(parts[1]);
-					}
+					dlLink.setAttribute("target", "_blank");
+
+					errorDiv.createEl("p", {
+						text: "After installing, restart Obsidian and click 'Retry Installation'.",
+						cls: "obsidianaitools-onboarding-error-message",
+					});
 				} else {
 					// Show plain text for other errors
 					errorDiv.createEl("p", {
@@ -800,6 +847,23 @@ export class OnboardingModal extends Modal {
 			});
 		if (isPrimary) {
 			btn.setCta();
+		}
+	}
+
+	/**
+	 * Get the actual binary/command name for an agent ID.
+	 * The internal ID (e.g. "claude-code-acp") differs from the binary name (e.g. "claude-agent-acp").
+	 */
+	private getAgentBinaryName(agentId: string): string {
+		switch (agentId) {
+			case "claude-code-acp":
+				return Platform.isWin ? "claude-agent-acp.cmd" : "claude-agent-acp";
+			case "codex-acp":
+				return Platform.isWin ? "codex-acp.cmd" : "codex-acp";
+			case "gemini-cli":
+				return Platform.isWin ? "gemini.cmd" : "gemini";
+			default:
+				return agentId;
 		}
 	}
 
