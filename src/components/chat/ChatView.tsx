@@ -6,6 +6,7 @@ import { createRoot, Root } from "react-dom/client";
 import type AgentClientPlugin from "../../plugin";
 
 // Component imports
+import { ErrorBoundary } from "../ErrorBoundary";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
@@ -956,7 +957,11 @@ export class ChatView extends ItemView {
 			container.empty();
 
 			this.root = createRoot(container);
-			this.root.render(<ChatComponent plugin={this.plugin} view={this} />);
+			this.root.render(
+				<ErrorBoundary>
+					<ChatComponent plugin={this.plugin} view={this} />
+				</ErrorBoundary>,
+			);
 		} catch (error) {
 			console.error("[AI Tools] Failed to open chat view:", error);
 		}
