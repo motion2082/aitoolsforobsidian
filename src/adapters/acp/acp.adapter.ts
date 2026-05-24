@@ -474,6 +474,11 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 						writeTextFile: false,
 					},
 					terminal: true,
+					// Advertise gateway auth support so the agent offers the
+					// gateway method instead of requiring a local Claude login.
+					auth: {
+						_meta: { gateway: true },
+					},
 				},
 				clientInfo: {
 					name: "aitoolsforobsidian",
@@ -517,6 +522,32 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 			const initResult = await Promise.race([initPromise, timeoutPromise]);
 			clearTimeout(initTimeoutId!);
+
+			// Auto-authenticate via gateway if the agent offers it and we
+			// have a configured API key + base URL. This replaces the old
+			// ANTHROPIC_AUTH_TOKEN env-var bypass that broke in v0.36.1.
+			const gatewayMethod = (initResult.authMethods ?? []).find(
+				(m: { id: string }) => m.id === "gateway",
+			);
+			if (gatewayMethod) {
+				const baseUrl = config.env?.ANTHROPIC_BASE_URL;
+				const apiKey = config.env?.ANTHROPIC_AUTH_TOKEN;
+				if (baseUrl && apiKey?.trim()) {
+					this.logger.log("[AcpAdapter] Auto-authenticating via gateway...");
+					await this.connection.authenticate({
+						methodId: "gateway",
+						_meta: {
+							gateway: {
+								baseUrl,
+								headers: { Authorization: `Bearer ${apiKey}` },
+							},
+						},
+					});
+					this.logger.log("[AcpAdapter] ✅ Gateway authentication successful");
+				} else {
+					this.logger.warn("[AcpAdapter] Gateway auth method available but no baseUrl/apiKey configured");
+				}
+			}
 
 			this.logger.log(
 				`[AcpAdapter] ✅ Connected to agent (protocol v${initResult.protocolVersion})`,
