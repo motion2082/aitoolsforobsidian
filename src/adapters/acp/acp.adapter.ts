@@ -1686,7 +1686,7 @@ To fix:
 		try {
 			this.logger.log(`[AcpAdapter] Resuming session: ${sessionId}...`);
 
-			const response = await this.connection.unstable_resumeSession({
+			const response = await this.connection.resumeSession({
 				sessionId,
 				cwd,
 				mcpServers: [],
