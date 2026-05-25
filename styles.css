@@ -520,6 +520,68 @@ If your plugin does not need CSS, delete this file.
 	gap: 8px;
 }
 
+/* Agent update banner — shows under the header when active agent has a
+   newer npm version available. */
+.obsidianaitools-agent-update-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 12px;
+	margin: 4px 8px 8px;
+	background-color: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	font-size: 13px;
+}
+
+.obsidianaitools-agent-update-banner-text {
+	color: var(--text-normal);
+	flex: 1;
+	min-width: 0;
+}
+
+.obsidianaitools-agent-update-banner-actions {
+	display: flex;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+.obsidianaitools-agent-update-banner-update,
+.obsidianaitools-agent-update-banner-dismiss {
+	padding: 4px 10px;
+	font-size: 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.obsidianaitools-agent-update-banner-update {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.obsidianaitools-agent-update-banner-update:hover:not(:disabled) {
+	background-color: var(--interactive-accent-hover);
+}
+
+.obsidianaitools-agent-update-banner-update:disabled,
+.obsidianaitools-agent-update-banner-dismiss:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.obsidianaitools-agent-update-banner-dismiss {
+	background-color: transparent;
+	color: var(--text-muted);
+}
+
+.obsidianaitools-agent-update-banner-dismiss:hover:not(:disabled) {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 /* Messages container */
 .obsidianaitools-chat-view-messages {
 	flex: 1;

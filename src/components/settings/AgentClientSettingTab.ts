@@ -1,5 +1,6 @@
 import {
 	App,
+	ButtonComponent,
 	PluginSettingTab,
 	Setting,
 	DropdownComponent,
@@ -10,6 +11,8 @@ import type AgentClientPlugin from "../../plugin";
 import type { CustomAgentSettings, AgentEnvVar } from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
 import { detectNodePath, detectAgentPath, validatePath } from "../../shared/path-detector";
+import { checkAgentVersion, getNpmPackage } from "../../shared/version-checker";
+import { installAgent, getAgentDisplayName } from "../../shared/agent-installer";
 
 export class AgentClientSettingTab extends PluginSettingTab {
 	plugin: AgentClientPlugin;
@@ -105,6 +108,8 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						}
 					}),
 			);
+
+		this.renderSystemStatusSection(containerEl);
 
 		// ─────────────────────────────────────────────────────────────────────
 		// API Configuration (global for all agents)
@@ -644,11 +649,11 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		const options: { id: string; label: string }[] = [
 			{
 				id: this.plugin.settings.claude.id,
-				label: `${claudeName} (${this.plugin.settings.claude.id}) - Recommended`,
+				label: `${claudeName} - Recommended`,
 			},
 			{
 				id: this.plugin.settings.gemini.id,
-				label: `${this.plugin.settings.gemini.displayName || this.plugin.settings.gemini.id} (${this.plugin.settings.gemini.id}) - Experimental`,
+				label: `${this.plugin.settings.gemini.displayName || this.plugin.settings.gemini.id} - Experimental`,
 			},
 		];
 		for (const agent of this.plugin.settings.customAgents) {
@@ -668,6 +673,228 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			seen.add(id);
 			return true;
 		});
+	}
+
+	/**
+	 * Look up the configured command path for a known agent, used to give
+	 * the version checker a fast/reliable installed-version source.
+	 */
+	private commandPathForAgent(agentId: string): string | undefined {
+		const s = this.plugin.settings;
+		if (agentId === s.claude.id) return s.claude.command || undefined;
+		if (agentId === s.codex.id) return s.codex.command || undefined;
+		if (agentId === s.gemini.id) return s.gemini.command || undefined;
+		return undefined;
+	}
+
+	/**
+	 * Render a prominent "System status" section at the top of settings that
+	 * surfaces node, npm, and each known agent's npm-package version in one
+	 * glance. Node and npm are display-only (deliberately no update button —
+	 * updating those mid-session can break things). Agent rows include an
+	 * Update button when outdated.
+	 */
+	private renderSystemStatusSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName("System status").setHeading();
+
+		this.renderEnvVersionRow(containerEl, "Node.js", "node");
+		this.renderEnvVersionRow(containerEl, "npm", "npm");
+
+		// Agent rows — Codex omitted intentionally until it's general-use ready.
+		const knownAgents: Array<[string, string]> = [
+			[this.plugin.settings.claude.id, this.plugin.settings.claude.displayName || "Claude Agent"],
+			[this.plugin.settings.gemini.id, this.plugin.settings.gemini.displayName || "Gemini CLI"],
+		];
+		for (const [agentId, displayName] of knownAgents) {
+			if (getNpmPackage(agentId)) {
+				this.renderAgentVersionRow(containerEl, agentId, displayName);
+			}
+		}
+	}
+
+	/**
+	 * Render a read-only version row for node or npm. No update button —
+	 * those are managed outside the plugin and auto-bumping them risks
+	 * breaking the user's wider toolchain.
+	 */
+	private renderEnvVersionRow(
+		containerEl: HTMLElement,
+		label: string,
+		which: "node" | "npm",
+	): void {
+		const setting = new Setting(containerEl)
+			.setName(label)
+			.setDesc("Checking…");
+
+		const check = async () => {
+			const { getNodeVersion, getNpmVersion } = await import(
+				"../../shared/version-checker"
+			);
+			const version =
+				which === "node"
+					? await getNodeVersion(this.plugin.settings.nodePath)
+					: await getNpmVersion(this.plugin.settings.nodePath);
+			if (version) {
+				setting.setDesc(`Installed: ${version}`);
+			} else {
+				setting.setDesc(
+					`Not found. Check the Node.js path setting above.`,
+				);
+			}
+		};
+		void check();
+	}
+
+	/**
+	 * Render a "Version" row showing the agent's installed npm version vs.
+	 * the latest published version, with an "Update" button when outdated.
+	 * Async — kicks off the check on render and updates the row in place.
+	 */
+	private renderAgentVersionRow(
+		sectionEl: HTMLElement,
+		agentId: string,
+		label?: string,
+	): void {
+		const pkg = getNpmPackage(agentId);
+		if (!pkg) return; // Custom agents — nothing to check
+
+		const setting = new Setting(sectionEl)
+			.setName(label ?? "Version")
+			.setDesc("Checking npm registry…");
+
+		type Mode = "check" | "update";
+		let mode: Mode = "check";
+		let btnComp: ButtonComponent | null = null;
+
+		const setButtonState = (label: string, disabled: boolean): void => {
+			if (!btnComp) return;
+			btnComp.setButtonText(label);
+			btnComp.setDisabled(disabled);
+		};
+
+		const runCheck = async (): Promise<void> => {
+			setting.setDesc("Checking npm registry…");
+			setButtonState("Checking…", true);
+			try {
+				const commandPath = this.commandPathForAgent(agentId);
+				const info = await checkAgentVersion(
+					agentId,
+					this.plugin.settings.nodePath,
+					commandPath,
+				);
+
+				// Not installed → offer Install.
+				if (!info.isInstalled) {
+					mode = "update";
+					setting.setDesc(
+						info.latest
+							? `Not installed. Latest: ${info.latest}.`
+							: "Not installed. Could not reach npm registry.",
+					);
+					setButtonState(
+						info.latest ? `Install ${info.latest}` : "Install",
+						false,
+					);
+					return;
+				}
+
+				// Installed but registry unreachable → no actionable state.
+				if (!info.latest) {
+					mode = "check";
+					setting.setDesc(
+						info.installed
+							? `Installed: ${info.installed}. Could not reach npm registry.`
+							: "Installed. Could not reach npm registry.",
+					);
+					setButtonState("Check again", false);
+					return;
+				}
+
+				// Installed + on latest → up to date.
+				if (info.installed && !info.isOutdated) {
+					mode = "check";
+					setting.setDesc(
+						`Installed: ${info.installed} (up to date).`,
+					);
+					setButtonState("Check again", false);
+					return;
+				}
+
+				// Installed + outdated (known): show both versions.
+				// Installed + unknown version: just offer the latest.
+				mode = "update";
+				setting.setDesc(
+					info.installed
+						? `Installed: ${info.installed} → Latest: ${info.latest} — update available.`
+						: `Installed. Latest: ${info.latest} — update available.`,
+				);
+				setButtonState(`Update to ${info.latest}`, false);
+			} catch {
+				mode = "check";
+				setting.setDesc("Version check failed.");
+				setButtonState("Check again", false);
+			}
+		};
+
+		const runUpdate = async (): Promise<void> => {
+			setButtonState("Disconnecting agent…", true);
+			setting.setDesc("Stopping the running agent so npm can replace its files…");
+			// Release file locks the running agent holds on its own binaries.
+			// Without this, Windows fails the npm install with EPERM.
+			await this.plugin.disconnectAgentForFileOperation();
+			setButtonState("Installing…", true);
+			setting.setDesc(`Running: npm install -g ${pkg}@latest --force`);
+			const buf: string[] = [];
+			const childProcess = installAgent(
+				agentId,
+				this.plugin.settings.nodePath,
+				(output) => {
+					buf.push(output);
+				},
+			);
+			if (!childProcess) {
+				new Notice(`Failed to start install for ${pkg}`, 4000);
+				void runCheck();
+				return;
+			}
+			childProcess.on("close", (code) => {
+				if (code === 0) {
+					new Notice(`${getAgentDisplayName(agentId)} updated.`, 4000);
+				} else {
+					const full = buf.join("");
+					console.error(
+						`[AgentVersionRow] npm install failed (exit ${code}). Full output:\n${full}`,
+					);
+					const errLines = full
+						.split(/\r?\n/)
+						.map((l) => l.trim())
+						.filter((l) => /^npm (ERR!|error)/i.test(l));
+					const summary = (errLines[0] ?? full).slice(0, 220);
+					new Notice(
+						`Update failed (exit ${code}). ${summary} See dev console for full log.`,
+						10000,
+					);
+				}
+				void runCheck();
+			});
+			childProcess.on("error", (err) => {
+				new Notice(`Update error: ${err.message}`, 6000);
+				void runCheck();
+			});
+		};
+
+		setting.addButton((btn) => {
+			btnComp = btn;
+			btn.setButtonText("Checking…")
+				.setDisabled(true)
+				.onClick(() => {
+					if (mode === "update") void runUpdate();
+					else void runCheck();
+				});
+		});
+
+		// Initial check on render
+		void runCheck();
 	}
 
 	private renderGeminiSettings(sectionEl: HTMLElement) {

@@ -1,3 +1,4 @@
+/* global console */
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "node:module";
@@ -13,17 +14,19 @@ const VAULT_DEPLOY_PATHS = [
 	"D:\\Obsidian Resources\\Demo Vaults\\Pauls Content",
 ];
 
-/** Copy main.js to every configured vault after each build. */
+/** Copy main.js, manifest.json, and styles.css to every configured vault. */
 function deployToVaults() {
+	const files = ["main.js", "manifest.json", "styles.css"];
 	for (const vault of VAULT_DEPLOY_PATHS) {
-		const dest = join(vault, ".obsidian", "plugins", "obsidianaitools", "main.js");
-		if (existsSync(join(vault, ".obsidian"))) {
-			try {
-				copyFileSync("main.js", dest);
-				console.log(`  → deployed to ${vault}`);
-			} catch (err) {
-				console.warn(`  ⚠ could not deploy to ${vault}: ${err.message}`);
+		const pluginDir = join(vault, ".obsidian", "plugins", "obsidianaitools");
+		if (!existsSync(join(vault, ".obsidian"))) continue;
+		try {
+			for (const f of files) {
+				if (existsSync(f)) copyFileSync(f, join(pluginDir, f));
 			}
+			console.log(`  → deployed to ${vault}`);
+		} catch (err) {
+			console.warn(`  ⚠ could not deploy to ${vault}: ${err.message}`);
 		}
 	}
 }

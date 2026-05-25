@@ -69,10 +69,21 @@ export interface AgentClientPluginSettings {
 	savedSessions: SavedSessionInfo[];
 	// Onboarding state
 	hasCompletedOnboarding: boolean;
+	// Last plugin version that was loaded (used to detect upgrades and show
+	// a one-time post-upgrade notice).
+	lastSeenPluginVersion: string;
 	// Global API configuration
 	apiKey: string;
 	baseUrl: string;
 	model: string;
+}
+
+// In claude-agent-acp v0.37.0 the npm package and binary were renamed from
+// claude-code-acp to claude-agent-acp. Rewrite any stale saved command — bare
+// name, full path with .cmd/.ps1, no extension — so users don't hit "command
+// not found" after the upgrade.
+function migrateClaudeCommand(command: string): string {
+	return command.replace(/claude-code-acp(?=\.|$)/i, "claude-agent-acp");
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
@@ -124,6 +135,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	},
 	savedSessions: [],
 	hasCompletedOnboarding: false,
+	lastSeenPluginVersion: "",
 	apiKey: "",
 	baseUrl: "https://chat.obsidianaitools.com",
 	model: "MiniMax-M2.1",
@@ -146,6 +158,11 @@ export default class AgentClientPlugin extends Plugin {
 
 			await this.loadSettings();
 			console.debug("[AI Tools] Settings loaded successfully");
+
+			// Show a one-time post-upgrade notice when the plugin version changes.
+			// Helps users on the claude-code-acp → claude-agent-acp migration realise
+			// they may need to click Install to upgrade the npm package.
+			this.maybeShowUpgradeNotice();
 
 			// Initialize settings store
 			this.settingsStore = createSettingsStore(this.settings, this);
@@ -245,6 +262,30 @@ export default class AgentClientPlugin extends Plugin {
 			this._acpAdapter = new AcpAdapter(this);
 		}
 		return this._acpAdapter;
+	}
+
+	/**
+	 * Disconnect any running agent before an operation that requires
+	 * exclusive access to the agent's installed files (e.g. `npm install -g`
+	 * to update it). Without this, Windows holds file locks on the running
+	 * agent's binaries and dependencies, and npm fails with EPERM.
+	 *
+	 * Resolves after a short grace period so the OS releases the file
+	 * handles before the caller proceeds.
+	 */
+	async disconnectAgentForFileOperation(): Promise<void> {
+		if (!this._acpAdapter) return;
+		try {
+			await this._acpAdapter.disconnect();
+		} catch (error) {
+			console.warn(
+				"[AgentClient] disconnect-for-file-op failed:",
+				error,
+			);
+		}
+		// Brief delay so Windows can finish releasing file handles before
+		// npm starts replacing files.
+		await new Promise((resolve) => setTimeout(resolve, 750));
 	}
 
 	async activateView() {
@@ -452,9 +493,9 @@ export default class AgentClientPlugin extends Plugin {
 					claudeFromRaw.displayName.trim().length > 0
 						? claudeFromRaw.displayName.trim()
 						: DEFAULT_SETTINGS.claude.displayName,
-				command:
+				command: migrateClaudeCommand(
 					typeof claudeFromRaw.command === "string" &&
-					claudeFromRaw.command.trim().length > 0
+						claudeFromRaw.command.trim().length > 0
 						? claudeFromRaw.command.trim()
 						: typeof rawSettings.claudeCodeAcpCommandPath ===
 									"string" &&
@@ -462,6 +503,7 @@ export default class AgentClientPlugin extends Plugin {
 									.length > 0
 							? rawSettings.claudeCodeAcpCommandPath.trim()
 							: DEFAULT_SETTINGS.claude.command,
+				),
 				args: resolvedClaudeArgs.length > 0 ? resolvedClaudeArgs : [],
 				env: resolvedClaudeEnv.length > 0 ? resolvedClaudeEnv : [],
 			},
@@ -623,6 +665,10 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.hasCompletedOnboarding === "boolean"
 					? rawSettings.hasCompletedOnboarding
 					: DEFAULT_SETTINGS.hasCompletedOnboarding,
+			lastSeenPluginVersion:
+				typeof rawSettings.lastSeenPluginVersion === "string"
+					? rawSettings.lastSeenPluginVersion
+					: DEFAULT_SETTINGS.lastSeenPluginVersion,
 			// Global API configuration
 			apiKey:
 				typeof rawSettings.apiKey === "string"
@@ -648,6 +694,41 @@ export default class AgentClientPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	/**
+	 * If the plugin version changed since the last load, show a one-time
+	 * notice and record the new version.
+	 *
+	 * Fresh-install detection: a brand-new install has no saved
+	 * `lastSeenPluginVersion` AND no other signs of prior use (no configured
+	 * agent command, no completed onboarding, no saved sessions). Anyone
+	 * with prior usage signals but empty `lastSeenPluginVersion` is an
+	 * upgrade from a pre-0.9.0 version that didn't write the field yet, and
+	 * still deserves the notice.
+	 */
+	private maybeShowUpgradeNotice(): void {
+		const current = this.manifest.version;
+		const previous = this.settings.lastSeenPluginVersion;
+
+		if (previous !== current) {
+			const isFreshInstall =
+				!previous &&
+				!this.settings.hasCompletedOnboarding &&
+				!this.settings.claude.command &&
+				this.settings.savedSessions.length === 0;
+
+			if (!isFreshInstall) {
+				const fromLabel = previous ? `v${previous}` : "an earlier version";
+				new Notice(
+					`AI Tools updated from ${fromLabel} to v${current}. If Claude Agent fails to connect, open Settings → AI Tools to update the npm package.`,
+					12000,
+				);
+			}
+
+			this.settings.lastSeenPluginVersion = current;
+			void this.saveSettings();
+		}
 	}
 
 	async saveSettingsAndNotify(nextSettings: AgentClientPluginSettings) {

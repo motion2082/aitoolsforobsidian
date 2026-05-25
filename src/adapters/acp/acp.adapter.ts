@@ -1,4 +1,6 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn, spawnSync, ChildProcess } from "child_process";
+import { existsSync } from "fs";
+import { Readable, Writable } from "stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { Platform } from "obsidian";
 
@@ -203,6 +205,43 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 		const command = config.command.trim();
 		const args = config.args.length > 0 ? [...config.args] : [];
+
+		// Pre-flight: verify the command actually exists before spawning.
+		// Without this, missing binaries surface as "ACP connection closed"
+		// on Windows (exit code 1, not 127), which is unhelpful — especially
+		// for users upgrading from claude-code-acp to claude-agent-acp who
+		// haven't reinstalled the npm package yet.
+		if (
+			!this.plugin.settings.windowsWslMode &&
+			!this.commandExists(command)
+		) {
+			this.logger.error(
+				`[AcpAdapter] Pre-flight: command not found: ${command}`,
+			);
+			if (isKnownAgent(config.id)) {
+				const agentError: AgentError = {
+					id: crypto.randomUUID(),
+					category: "configuration",
+					severity: "error",
+					title: "Command Not Found",
+					message: `${getAgentDisplayName(config.id)} is not installed (looked for "${command}"). Click "Install" to install the latest version automatically.`,
+					suggestion:
+						"Click 'Install' to install via npm, or configure the path manually in settings.",
+					occurredAt: new Date(),
+					agentId: config.id,
+					code: "COMMAND_NOT_FOUND",
+					canAutoInstall: true,
+				};
+				this.errorCallback?.(agentError);
+				const wrappedError = new Error(agentError.message);
+				(wrappedError as Error & { agentError: AgentError }).agentError =
+					agentError;
+				throw wrappedError;
+			}
+			throw new Error(
+				`Command "${command}" not found. Check the agent's command path in settings.`,
+			);
+		}
 
 		this.logger.log(
 			`[AcpAdapter] Active agent: ${config.displayName} (${config.id})`,
@@ -420,7 +459,9 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 		agentProcess.stderr?.setEncoding("utf8");
 		agentProcess.stderr?.on("data", (data) => {
-			this.logger.log(`[AcpAdapter] ${agentLabel} stderr:`, data);
+			// Always log stderr so users can diagnose agent crashes without
+			// having to enable debug mode first.
+			console.error(`[AcpAdapter] ${agentLabel} stderr:`, data);
 		});
 
 		// Create stream for ACP communication
@@ -432,27 +473,14 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		const stdin = agentProcess.stdin;
 		const stdout = agentProcess.stdout;
 
-		const input = new WritableStream<Uint8Array>({
-			write(chunk: Uint8Array) {
-				stdin.write(chunk);
-			},
-			close() {
-				stdin.end();
-			},
-		});
-		const output = new ReadableStream<Uint8Array>({
-			start(controller) {
-				stdout.on("data", (chunk: Uint8Array) => {
-					controller.enqueue(chunk);
-				});
-				stdout.on("end", () => {
-					controller.close();
-				});
-				stdout.on("error", (err) => {
-					controller.error(err);
-				});
-			},
-		});
+		// Use Node.js's native stream-to-web converters rather than manually
+		// wrapping the Node streams with Chromium's WHATWG globals. `.toWeb`
+		// is present at runtime (Node 17+) but missing from older @types/node;
+		// hence the cast.
+		/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+		const input = (Writable as any).toWeb(stdin) as WritableStream<Uint8Array>;
+		const output = (Readable as any).toWeb(stdout) as ReadableStream<Uint8Array>;
+		/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 		this.logger.log(
 			"[AcpAdapter] Using working directory:",
@@ -523,31 +551,14 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			const initResult = await Promise.race([initPromise, timeoutPromise]);
 			clearTimeout(initTimeoutId!);
 
-			// Auto-authenticate via gateway if the agent offers it and we
-			// have a configured API key + base URL. This replaces the old
-			// ANTHROPIC_AUTH_TOKEN env-var bypass that broke in v0.36.1.
-			const gatewayMethod = (initResult.authMethods ?? []).find(
-				(m: { id: string }) => m.id === "gateway",
-			);
-			if (gatewayMethod) {
-				const baseUrl = config.env?.ANTHROPIC_BASE_URL;
-				const apiKey = config.env?.ANTHROPIC_AUTH_TOKEN;
-				if (baseUrl && apiKey?.trim()) {
-					this.logger.log("[AcpAdapter] Auto-authenticating via gateway...");
-					await this.connection.authenticate({
-						methodId: "gateway",
-						_meta: {
-							gateway: {
-								baseUrl,
-								headers: { Authorization: `Bearer ${apiKey}` },
-							},
-						},
-					});
-					this.logger.log("[AcpAdapter] ✅ Gateway authentication successful");
-				} else {
-					this.logger.warn("[AcpAdapter] Gateway auth method available but no baseUrl/apiKey configured");
-				}
-			}
+			// Note: do NOT call connection.authenticate(gateway) here. When
+			// gateway auth is configured the agent forces ANTHROPIC_AUTH_TOKEN=" "
+			// on the Claude CLI subprocess, which makes Claude CLI emit its own
+			// (empty) Authorization header that overrides the gateway's real
+			// header. By not authenticating, the user's ANTHROPIC_AUTH_TOKEN /
+			// ANTHROPIC_BASE_URL env vars (set in buildAgentConfigWithApiKey)
+			// pass straight through process.env to the Claude CLI, which is the
+			// same flow that worked before the v0.37.0 agent upgrade.
 
 			this.logger.log(
 				`[AcpAdapter] ✅ Connected to agent (protocol v${initResult.protocolVersion})`,
@@ -1147,6 +1158,66 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			message: `Failed to start ${agentLabel}: ${error.message}`,
 			suggestion: "Please check the agent path and Node.js configuration in settings.",
 		};
+	}
+
+	/**
+	 * Check whether a command can be resolved on this system.
+	 * Accepts either a full path or a bare command name.
+	 *
+	 * Mirrors the actual spawn flow on each platform so the check sees the
+	 * same PATH the agent process will:
+	 *   - Windows: enhanced PATH from the registry + nodePath setting
+	 *   - macOS/Linux: a login shell, so .zshrc/.bash_profile contribute the
+	 *     same PATH entries the agent gets. Critical because Obsidian as a
+	 *     GUI app inherits a minimal PATH from launchctl that usually omits
+	 *     /usr/local/bin and ~/.npm-global/bin.
+	 */
+	private commandExists(command: string): boolean {
+		// Full path: just stat it.
+		if (
+			command.includes("/") ||
+			command.includes("\\") ||
+			/^[A-Za-z]:/.test(command)
+		) {
+			return existsSync(command);
+		}
+
+		const nodePath = this.plugin.settings.nodePath?.trim();
+		const nodeDir = nodePath ? resolveCommandDirectory(nodePath) : null;
+
+		try {
+			if (Platform.isWin) {
+				const env: NodeJS.ProcessEnv = getEnhancedWindowsEnv({
+					...process.env,
+				});
+				if (nodeDir) {
+					env.PATH = `${nodeDir};${env.PATH ?? ""}`;
+				}
+				const result = spawnSync("where.exe", [command], {
+					env,
+					timeout: 4000,
+					encoding: "utf-8",
+				});
+				return result.status === 0 && !!result.stdout?.trim();
+			}
+
+			// macOS / Linux: run `which` inside a login shell so the same
+			// shell-config PATH the agent will see is used here.
+			const shell = Platform.isMacOS ? "/bin/zsh" : "/bin/bash";
+			const safeCmd = command.replace(/'/g, "'\\''");
+			let shellCmd = `which '${safeCmd}'`;
+			if (nodeDir) {
+				const safeNodeDir = nodeDir.replace(/'/g, "'\\''");
+				shellCmd = `export PATH='${safeNodeDir}':"$PATH"; ${shellCmd}`;
+			}
+			const result = spawnSync(shell, ["-l", "-c", shellCmd], {
+				timeout: 4000,
+				encoding: "utf-8",
+			});
+			return result.status === 0 && !!result.stdout?.trim();
+		} catch {
+			return false;
+		}
 	}
 
 	/**

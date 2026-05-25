@@ -10,6 +10,7 @@ import { ErrorBoundary } from "../ErrorBoundary";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
+import { AgentUpdateBanner } from "./AgentUpdateBanner";
 import { SessionHistoryModal } from "./SessionHistoryModal";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
@@ -214,6 +215,14 @@ function ChatComponent({
 	// Local State
 	// ============================================================
 	const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
+	const [agentUpdate, setAgentUpdate] = useState<{
+		agentId: string;
+		installed: string | null;
+		latest: string;
+	} | null>(null);
+	const [dismissedAgentUpdates, setDismissedAgentUpdates] = useState<
+		Set<string>
+	>(new Set());
 	const [restoredMessage, setRestoredMessage] = useState<string | null>(null);
 	/** Flag to ignore history replay messages during session/load */
 	const [isLoadingSessionHistory, setIsLoadingSessionHistory] =
@@ -730,6 +739,80 @@ function ChatComponent({
 			});
 	}, [plugin]);
 
+	// Agent npm-package update check. Runs when the active agent changes;
+	// shows a banner if the installed version is older than the registry's
+	// latest. Dismissals are remembered for the React-mount lifetime per
+	// version, so users don't get re-nagged after dismissing.
+	useEffect(() => {
+		const activeAgentId =
+			settings.activeAgentId || settings.claude.id;
+		if (!activeAgentId) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const { checkAgentVersion, getNpmPackage } = await import(
+					"../../shared/version-checker"
+				);
+				if (!getNpmPackage(activeAgentId)) return;
+				const cmd =
+					activeAgentId === settings.claude.id
+						? settings.claude.command
+						: activeAgentId === settings.codex.id
+							? settings.codex.command
+							: activeAgentId === settings.gemini.id
+								? settings.gemini.command
+								: undefined;
+				const info = await checkAgentVersion(
+					activeAgentId,
+					settings.nodePath,
+					cmd || undefined,
+				);
+				if (cancelled) return;
+
+				// Show the banner when the agent is installed and there's a
+				// known newer version (or when we can't read the installed
+				// version but a latest exists — the user can still choose to
+				// update). Skip if not installed (settings handles install)
+				// or if the user already dismissed this latest version.
+				const dismissKey = info.latest
+					? `${activeAgentId}@${info.latest}`
+					: "";
+				const shouldShow =
+					info.isInstalled &&
+					!!info.latest &&
+					!dismissedAgentUpdates.has(dismissKey) &&
+					// Only show if outdated, OR if we can't tell (no installed
+					// version detected — being honest that we're unsure).
+					(info.isOutdated || !info.installed);
+
+				if (shouldShow && info.latest) {
+					setAgentUpdate({
+						agentId: activeAgentId,
+						installed: info.installed,
+						latest: info.latest,
+					});
+				} else {
+					setAgentUpdate(null);
+				}
+			} catch (err) {
+				console.error("[ChatView] agent version check failed:", err);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		settings.activeAgentId,
+		settings.claude.id,
+		settings.claude.command,
+		settings.codex.id,
+		settings.codex.command,
+		settings.gemini.id,
+		settings.gemini.command,
+		settings.nodePath,
+		dismissedAgentUpdates,
+	]);
+
 	// ============================================================
 	// Effects - Save Session Messages on Turn End
 	// ============================================================
@@ -881,6 +964,29 @@ function ChatComponent({
 				onOpenSettings={handleOpenSettings}
 				onOpenHistory={handleOpenHistory}
 			/>
+
+			{agentUpdate && (
+				<AgentUpdateBanner
+					plugin={plugin}
+					agentId={agentUpdate.agentId}
+					installedVersion={agentUpdate.installed}
+					latestVersion={agentUpdate.latest}
+					nodePath={settings.nodePath}
+					onDismiss={() => {
+						setDismissedAgentUpdates(
+							(prev) =>
+								new Set([
+									...prev,
+									`${agentUpdate.agentId}@${agentUpdate.latest}`,
+								]),
+						);
+						setAgentUpdate(null);
+					}}
+					onUpdated={() => {
+						setAgentUpdate(null);
+					}}
+				/>
+			)}
 
 			<ChatMessages
 				messages={messages}
