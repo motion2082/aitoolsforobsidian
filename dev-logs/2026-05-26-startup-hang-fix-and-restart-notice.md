@@ -137,13 +137,14 @@ Later pattern used for plugin upgrades.
 
 ### 6. Auto-save command path after install (fixes stale settings on Linux/Mac)
 
-**Status**: ✅ Complete
+**Status**: ✅ Complete (two iterations — see note below)
 
 **Files changed:**
 - `src/components/chat/AgentUpdateBanner.tsx`
 - `src/components/settings/AgentClientSettingTab.ts`
+- `src/shared/version-checker.ts` — exported `getNpmGlobalRoot`
 
-**Problem:** After a successful `npm install -g`, the settings page
+**Problem (original):** After a successful `npm install -g`, the settings page
 re-ran `checkAgentVersion` but the `commandPath` setting was still empty
 (nothing was auto-saved). On Linux/Mac, detection falls through to
 login-shell `which` + hardcoded paths. If the binary landed somewhere
@@ -151,19 +152,51 @@ not covered (e.g. nvm-managed node at `~/.nvm/versions/node/vXX/bin/`),
 all paths miss and settings shows "Not installed" even though the install
 succeeded.
 
-**Fix:** After a successful install, `detectAgentPath()` is called and the
+**Fix (original):** After a successful install, `detectAgentPath()` is called and the
 result is saved to `settings.<agent>.command` (only when no path was
 previously configured — never overwrites a deliberate manual setting).
 `runCheck()` then uses the fast `existsSync` path and reflects the real
 installed state immediately.
 
+**Problem (second iteration):** A user's saved command was the bare name
+`"claude-agent-acp"` — no path separators. `existsSync("claude-agent-acp")`
+always returns `false` (OS requires absolute or relative paths). The
+auto-save only triggered when the command was completely empty, so a bare
+name slipped through and `checkAgentVersion` continued failing the
+`existsSync` step on every check.
+
+**Fix (second iteration):**
+
+Added `isBareCommand(cmd)` helper:
+```typescript
+private static isBareCommand(cmd: string): boolean {
+    return !!cmd && !cmd.includes("/") && !cmd.includes("\\");
+}
+```
+
+`autoSaveCommandPath()` now saves when `!cmd || isBareCommand(cmd)` — both
+empty settings and bare-name settings are replaced with the resolved full path.
+
+Added `detectPathFromNpmRoot(agentId)` as a two-step fallback when
+`detectAgentPath()` (login-shell `which` + hardcoded dirs) returns nothing:
+1. Run `npm root -g` (3 s timeout) → e.g. `/usr/local/lib/node_modules`
+2. Derive bin dir:
+   - Unix: `join(dirname(dirname(root)), "bin")` → `/usr/local/bin`
+   - Windows: `dirname(root)` → `…\npm`
+3. `existsSync(join(binDir, binaryName))` → save if found
+
+`getNpmGlobalRoot` in `version-checker.ts` was made `export` so both
+`AgentClientSettingTab` and `AgentUpdateBanner` can import and call it.
+
 **Detection chain on Linux** (for reference when debugging):
-1. `existsSync(savedCommandPath)` — skipped if empty
-2. `/bin/bash -l -c "which 'claude-agent-acp'"` via `spawnSync`
-3. `existsSync` on hardcoded paths: `/usr/bin/`, `/usr/local/bin/`,
-   `~/.npm-global/bin/`
-4. `npm root -g` (async, 3 s timeout)
-5. `npm list -g --json` (async, 5 s timeout)
+1. `existsSync(savedCommandPath)` — skipped if empty or bare name
+2. `detectAgentPath()`:
+   a. `/bin/bash -l -c "which 'claude-agent-acp'"` via spawnSync
+   b. `existsSync` on hardcoded paths: `/usr/bin/`, `/usr/local/bin/`, `~/.npm-global/bin/`
+3. `detectPathFromNpmRoot()` fallback:
+   a. `npm root -g` (async, 3 s timeout)
+   b. `existsSync(join(binDir, binaryName))`
+4. `npm list -g --json` (async, 5 s timeout — only in version-check path)
 
 ---
 
@@ -225,20 +258,23 @@ warning and know to check for a plugin update before filing bugs.
 
 ```
 M  src/adapters/acp/acp.adapter.ts    spawnSync → spawn (commandExistsAsync)
+M  src/adapters/acp/acp.adapter.ts    spawnSync → spawn (commandExistsAsync)
 M  src/components/chat/AgentUpdateBanner.tsx
                                       Restart Now after install,
-                                      auto-save command path
+                                      auto-save command path (empty + bare names),
+                                      detectPathFromNpmRoot fallback
 M  src/components/chat/ChatView.tsx   3-second delay on version-check effect,
                                       compatWarning state + banner render
 M  src/components/settings/AgentClientSettingTab.ts
                                       Restart Now after install,
-                                      autoSaveCommandPath(),
-                                      auto-save after successful install
+                                      autoSaveCommandPath() (empty + bare names),
+                                      detectPathFromNpmRoot() fallback
 M  src/plugin.ts                      persistent restart notice with button,
                                       compatWarningDismissed setting
 M  src/shared/version-checker.ts      10s → 5s, 5s → 3s timeouts,
                                       AGENT_MAX_TESTED_VERSIONS,
-                                      isAboveTestedVersion + maxTestedVersion
+                                      isAboveTestedVersion + maxTestedVersion,
+                                      export getNpmGlobalRoot
 M  styles.css                         upgrade-notice button-row styles,
                                       compat-warning banner styles
 ```
@@ -249,7 +285,8 @@ M  styles.css                         upgrade-notice button-row styles,
 
 - ✅ TypeScript build clean
 - ✅ Windows — install, update banner, restart notice all working
-- ✅ Linux — install succeeds, restart notice shows, settings no longer stale
+- ✅ Linux — install succeeds, restart notice shows
+- ✅ Linux — settings no longer stale (bare-name path fixed, npm root fallback)
 - ✅ Rollback to 0.36.1 triggers update banner after 3 s
 
 ### Not yet tested
