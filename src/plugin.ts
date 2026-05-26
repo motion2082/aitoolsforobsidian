@@ -72,6 +72,10 @@ export interface AgentClientPluginSettings {
 	// Last plugin version that was loaded (used to detect upgrades and show
 	// a one-time post-upgrade notice).
 	lastSeenPluginVersion: string;
+	// Dismissed compatibility warnings keyed by agentId, value is the
+	// installed version the user dismissed — so we don't re-show the same
+	// warning every session.
+	compatWarningDismissed: Record<string, string>;
 	// Global API configuration
 	apiKey: string;
 	baseUrl: string;
@@ -136,6 +140,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	savedSessions: [],
 	hasCompletedOnboarding: false,
 	lastSeenPluginVersion: "",
+	compatWarningDismissed: {},
 	apiKey: "",
 	baseUrl: "https://chat.obsidianaitools.com",
 	model: "MiniMax-M2.1",
@@ -669,6 +674,12 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.lastSeenPluginVersion === "string"
 					? rawSettings.lastSeenPluginVersion
 					: DEFAULT_SETTINGS.lastSeenPluginVersion,
+			compatWarningDismissed:
+				typeof rawSettings.compatWarningDismissed === "object" &&
+				rawSettings.compatWarningDismissed !== null &&
+				!Array.isArray(rawSettings.compatWarningDismissed)
+					? (rawSettings.compatWarningDismissed as Record<string, string>)
+					: DEFAULT_SETTINGS.compatWarningDismissed,
 			// Global API configuration
 			apiKey:
 				typeof rawSettings.apiKey === "string"

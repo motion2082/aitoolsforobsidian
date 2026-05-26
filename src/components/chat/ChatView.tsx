@@ -223,6 +223,11 @@ function ChatComponent({
 	const [dismissedAgentUpdates, setDismissedAgentUpdates] = useState<
 		Set<string>
 	>(new Set());
+	const [compatWarning, setCompatWarning] = useState<{
+		agentId: string;
+		installed: string;
+		maxTested: string;
+	} | null>(null);
 	const [restoredMessage, setRestoredMessage] = useState<string | null>(null);
 	/** Flag to ignore history replay messages during session/load */
 	const [isLoadingSessionHistory, setIsLoadingSessionHistory] =
@@ -799,6 +804,29 @@ function ChatComponent({
 					} else {
 						setAgentUpdate(null);
 					}
+
+					// Compatibility warning: installed version is newer than
+					// what this plugin release was tested against.
+					// Only show when we know the exact installed version, it's
+					// above maxTested, and the user hasn't dismissed it yet for
+					// this specific version (persisted across restarts).
+					if (
+						info.isAboveTestedVersion &&
+						info.installed &&
+						info.maxTestedVersion
+					) {
+						const dismissed =
+							plugin.settings.compatWarningDismissed[activeAgentId];
+						if (dismissed !== info.installed) {
+							setCompatWarning({
+								agentId: activeAgentId,
+								installed: info.installed,
+								maxTested: info.maxTestedVersion,
+							});
+						}
+					} else {
+						setCompatWarning(null);
+					}
 				} catch (err) {
 					console.error("[ChatView] agent version check failed:", err);
 				}
@@ -994,6 +1022,30 @@ function ChatComponent({
 						setAgentUpdate(null);
 					}}
 				/>
+			)}
+
+			{compatWarning && !agentUpdate && (
+				<div className="obsidianaitools-compat-warning">
+					<span className="obsidianaitools-compat-warning-text">
+						⚠️ {compatWarning.agentId === settings.claude.id ? "Claude Agent" :
+							compatWarning.agentId === settings.gemini.id ? "Gemini CLI" :
+							compatWarning.agentId} v{compatWarning.installed} is newer than
+						the tested version (v{compatWarning.maxTested}) — if you hit
+						issues, check for a plugin update.
+					</span>
+					<button
+						className="obsidianaitools-compat-warning-dismiss"
+						onClick={() => {
+							// Persist dismiss so it won't show again for this version
+							plugin.settings.compatWarningDismissed[compatWarning.agentId] =
+								compatWarning.installed;
+							void plugin.saveSettings();
+							setCompatWarning(null);
+						}}
+					>
+						Dismiss
+					</button>
+				</div>
 			)}
 
 			<ChatMessages

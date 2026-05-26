@@ -22,6 +22,12 @@ export interface VersionInfo {
 	 *  Stays false when installed is unknown to avoid false "outdated"
 	 *  reports. */
 	isOutdated: boolean;
+	/** True when the installed version is newer than the highest version
+	 *  this plugin release was tested against. A newer agent may have
+	 *  breaking protocol changes. Only set when installed version is known. */
+	isAboveTestedVersion: boolean;
+	/** The max tested version for this agent, or null if no range defined. */
+	maxTestedVersion: string | null;
 }
 
 /**
@@ -31,6 +37,16 @@ const NPM_PACKAGES: Record<string, string> = {
 	"claude-code-acp": "@agentclientprotocol/claude-agent-acp",
 	"codex-acp": "@zed-industries/codex-acp",
 	"gemini-cli": "@google/gemini-cli",
+};
+
+/**
+ * The highest agent package version explicitly tested with this plugin
+ * release. Update this whenever a new agent version is verified working.
+ * Leaving an agent out means no compatibility warning is shown for it.
+ */
+export const AGENT_MAX_TESTED_VERSIONS: Record<string, string> = {
+	"claude-code-acp": "0.37.0",
+	"gemini-cli": "0.43.0",
 };
 
 export function getNpmPackage(agentId: string): string | null {
@@ -476,5 +492,17 @@ export async function checkAgentVersion(
 		}
 	}
 
-	return { installed, latest, isInstalled, isOutdated };
+	const maxTestedVersion = AGENT_MAX_TESTED_VERSIONS[agentId] ?? null;
+	let isAboveTestedVersion = false;
+	if (installed && maxTestedVersion) {
+		try {
+			// gt() throws on invalid semver — fall back to string compare
+			const { gt } = await import("semver");
+			isAboveTestedVersion = gt(installed, maxTestedVersion);
+		} catch {
+			isAboveTestedVersion = installed !== maxTestedVersion;
+		}
+	}
+
+	return { installed, latest, isInstalled, isOutdated, isAboveTestedVersion, maxTestedVersion };
 }

@@ -520,6 +520,38 @@ If your plugin does not need CSS, delete this file.
 	gap: 8px;
 }
 
+/* Compatibility warning — untested agent version */
+.obsidianaitools-compat-warning {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	background-color: var(--background-modifier-warning, rgba(255,200,0,0.12));
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: 12px;
+}
+
+.obsidianaitools-compat-warning-text {
+	flex: 1;
+	color: var(--text-warning, var(--text-muted));
+}
+
+.obsidianaitools-compat-warning-dismiss {
+	padding: 3px 8px;
+	font-size: 12px;
+	background: transparent;
+	color: var(--text-muted);
+	border-radius: 4px;
+	cursor: pointer;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.obsidianaitools-compat-warning-dismiss:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 /* Agent update banner — shows under the header when active agent has a
    newer npm version available. */
 .obsidianaitools-agent-update-banner {
