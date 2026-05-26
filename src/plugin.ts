@@ -720,10 +720,52 @@ export default class AgentClientPlugin extends Plugin {
 
 			if (!isFreshInstall) {
 				const fromLabel = previous ? `v${previous}` : "an earlier version";
-				new Notice(
-					`AI Tools updated from ${fromLabel} to v${current}. If Claude Agent fails to connect, open Settings → AI Tools to update the npm package.`,
-					12000,
-				);
+
+				// Persistent notice (timeout = 0) with a Restart Now button so
+				// users see clearly that a restart is needed for the new code to
+				// take effect, and can act on it immediately.
+				const notice = new Notice("", 0);
+				const el = notice.noticeEl;
+
+				el.createEl("p", {
+					text: `✅ AI Tools updated ${fromLabel} → v${current}`,
+					cls: "obsidianaitools-upgrade-title",
+				});
+				el.createEl("p", {
+					text: "Restart Obsidian to apply the update.",
+					cls: "obsidianaitools-upgrade-body",
+				});
+
+				const btnRow = el.createDiv({
+					cls: "obsidianaitools-upgrade-buttons",
+				});
+
+				const restartBtn = btnRow.createEl("button", {
+					text: "Restart Now",
+					cls: "mod-cta obsidianaitools-upgrade-btn-restart",
+				});
+				restartBtn.addEventListener("click", () => {
+					notice.hide();
+					// Reload the Electron renderer — equivalent to Cmd/Ctrl+R
+					// inside Obsidian, which fully restarts the app.
+					try {
+						(
+							this.app as unknown as {
+								commands: {
+									executeCommandById: (id: string) => void;
+								};
+							}
+						).commands.executeCommandById("app:reload");
+					} catch {
+						window.location.reload();
+					}
+				});
+
+				const laterBtn = btnRow.createEl("button", {
+					text: "Later",
+					cls: "obsidianaitools-upgrade-btn-later",
+				});
+				laterBtn.addEventListener("click", () => notice.hide());
 			}
 
 			this.settings.lastSeenPluginVersion = current;

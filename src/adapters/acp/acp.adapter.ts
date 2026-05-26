@@ -1,4 +1,4 @@
-import { spawn, spawnSync, ChildProcess } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { existsSync } from "fs";
 import { Readable, Writable } from "stream";
 import * as acp from "@agentclientprotocol/sdk";
@@ -213,7 +213,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		// haven't reinstalled the npm package yet.
 		if (
 			!this.plugin.settings.windowsWslMode &&
-			!this.commandExists(command)
+			!(await this.commandExistsAsync(command))
 		) {
 			this.logger.error(
 				`[AcpAdapter] Pre-flight: command not found: ${command}`,
@@ -1172,52 +1172,84 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	 *     GUI app inherits a minimal PATH from launchctl that usually omits
 	 *     /usr/local/bin and ~/.npm-global/bin.
 	 */
-	private commandExists(command: string): boolean {
-		// Full path: just stat it.
+	/**
+	 * Non-blocking async check: does the given command exist on PATH?
+	 *
+	 * Uses async `spawn` instead of `spawnSync` so the JS event loop is
+	 * never blocked (spawnSync freezes the Electron renderer for its full
+	 * timeout duration). On timeout we resolve `true` — a false-positive is
+	 * safer than a false-negative because the actual spawn attempt will
+	 * report a meaningful error if the binary really isn't there.
+	 */
+	private commandExistsAsync(command: string): Promise<boolean> {
+		// Full path: just stat it synchronously — always instant.
 		if (
 			command.includes("/") ||
 			command.includes("\\") ||
 			/^[A-Za-z]:/.test(command)
 		) {
-			return existsSync(command);
+			return Promise.resolve(existsSync(command));
 		}
 
 		const nodePath = this.plugin.settings.nodePath?.trim();
 		const nodeDir = nodePath ? resolveCommandDirectory(nodePath) : null;
 
-		try {
-			if (Platform.isWin) {
-				const env: NodeJS.ProcessEnv = getEnhancedWindowsEnv({
-					...process.env,
-				});
-				if (nodeDir) {
-					env.PATH = `${nodeDir};${env.PATH ?? ""}`;
-				}
-				const result = spawnSync("where.exe", [command], {
-					env,
-					timeout: 4000,
-					encoding: "utf-8",
-				});
-				return result.status === 0 && !!result.stdout?.trim();
-			}
+		return new Promise<boolean>((resolve) => {
+			try {
+				let spawnCommand: string;
+				let spawnArgs: string[];
+				let env: NodeJS.ProcessEnv = { ...process.env };
 
-			// macOS / Linux: run `which` inside a login shell so the same
-			// shell-config PATH the agent will see is used here.
-			const shell = Platform.isMacOS ? "/bin/zsh" : "/bin/bash";
-			const safeCmd = command.replace(/'/g, "'\\''");
-			let shellCmd = `which '${safeCmd}'`;
-			if (nodeDir) {
-				const safeNodeDir = nodeDir.replace(/'/g, "'\\''");
-				shellCmd = `export PATH='${safeNodeDir}':"$PATH"; ${shellCmd}`;
+				if (Platform.isWin) {
+					env = getEnhancedWindowsEnv(env);
+					if (nodeDir) {
+						env.PATH = `${nodeDir};${env.PATH ?? ""}`;
+					}
+					spawnCommand = "where.exe";
+					spawnArgs = [command];
+				} else {
+					// macOS / Linux: login shell so nvm/homebrew PATH is visible.
+					const shell = Platform.isMacOS ? "/bin/zsh" : "/bin/bash";
+					const safeCmd = command.replace(/'/g, "'\\''");
+					let shellCmd = `which '${safeCmd}'`;
+					if (nodeDir) {
+						const safeNodeDir = nodeDir.replace(/'/g, "'\\''");
+						shellCmd = `export PATH='${safeNodeDir}':"$PATH"; ${shellCmd}`;
+					}
+					spawnCommand = shell;
+					spawnArgs = ["-l", "-c", shellCmd];
+				}
+
+				const child = spawn(spawnCommand, spawnArgs, {
+					stdio: ["pipe", "pipe", "pipe"],
+					env,
+				});
+
+				let stdout = "";
+				child.stdout?.on("data", (data: unknown) => {
+					stdout += typeof data === "string" ? data : String(data);
+				});
+
+				// Timeout: resolve true so we proceed and let the actual agent
+				// spawn surface a real error if the binary is missing.
+				const timer = setTimeout(() => {
+					child.kill();
+					resolve(true);
+				}, 3000);
+
+				child.on("close", (code: number | null) => {
+					clearTimeout(timer);
+					resolve(code === 0 && !!stdout.trim());
+				});
+
+				child.on("error", () => {
+					clearTimeout(timer);
+					resolve(false);
+				});
+			} catch {
+				resolve(false);
 			}
-			const result = spawnSync(shell, ["-l", "-c", shellCmd], {
-				timeout: 4000,
-				encoding: "utf-8",
-			});
-			return result.status === 0 && !!result.stdout?.trim();
-		} catch {
-			return false;
-		}
+		});
 	}
 
 	/**

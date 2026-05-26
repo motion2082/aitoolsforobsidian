@@ -582,6 +582,46 @@ If your plugin does not need CSS, delete this file.
 	color: var(--text-normal);
 }
 
+/* ---------------------------------------------------------------
+   Plugin upgrade notice (shown after version bump, persistent)
+--------------------------------------------------------------- */
+.obsidianaitools-upgrade-title {
+	font-weight: 600;
+	margin: 0 0 4px;
+}
+
+.obsidianaitools-upgrade-body {
+	margin: 0 0 10px;
+	color: var(--text-muted);
+	font-size: 13px;
+}
+
+.obsidianaitools-upgrade-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.obsidianaitools-upgrade-btn-restart {
+	padding: 5px 12px;
+	font-size: 13px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.obsidianaitools-upgrade-btn-later {
+	padding: 5px 12px;
+	font-size: 13px;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.obsidianaitools-upgrade-btn-later:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 /* Messages container */
 .obsidianaitools-chat-view-messages {
 	flex: 1;

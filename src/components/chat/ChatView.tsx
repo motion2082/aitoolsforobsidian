@@ -748,58 +748,66 @@ function ChatComponent({
 			settings.activeAgentId || settings.claude.id;
 		if (!activeAgentId) return;
 		let cancelled = false;
-		void (async () => {
-			try {
-				const { checkAgentVersion, getNpmPackage } = await import(
-					"../../shared/version-checker"
-				);
-				if (!getNpmPackage(activeAgentId)) return;
-				const cmd =
-					activeAgentId === settings.claude.id
-						? settings.claude.command
-						: activeAgentId === settings.codex.id
-							? settings.codex.command
-							: activeAgentId === settings.gemini.id
-								? settings.gemini.command
-								: undefined;
-				const info = await checkAgentVersion(
-					activeAgentId,
-					settings.nodePath,
-					cmd || undefined,
-				);
-				if (cancelled) return;
 
-				// Show the banner when the agent is installed and there's a
-				// known newer version (or when we can't read the installed
-				// version but a latest exists — the user can still choose to
-				// update). Skip if not installed (settings handles install)
-				// or if the user already dismissed this latest version.
-				const dismissKey = info.latest
-					? `${activeAgentId}@${info.latest}`
-					: "";
-				const shouldShow =
-					info.isInstalled &&
-					!!info.latest &&
-					!dismissedAgentUpdates.has(dismissKey) &&
-					// Only show if outdated, OR if we can't tell (no installed
-					// version detected — being honest that we're unsure).
-					(info.isOutdated || !info.installed);
+		// Delay the version check so it doesn't compete with session
+		// initialisation during Obsidian startup. The check spawns child
+		// processes (npm/where/which) that — even async — add load pressure.
+		const delayId = window.setTimeout(() => {
+			void (async () => {
+				try {
+					const { checkAgentVersion, getNpmPackage } = await import(
+						"../../shared/version-checker"
+					);
+					if (!getNpmPackage(activeAgentId)) return;
+					const cmd =
+						activeAgentId === settings.claude.id
+							? settings.claude.command
+							: activeAgentId === settings.codex.id
+								? settings.codex.command
+								: activeAgentId === settings.gemini.id
+									? settings.gemini.command
+									: undefined;
+					const info = await checkAgentVersion(
+						activeAgentId,
+						settings.nodePath,
+						cmd || undefined,
+					);
+					if (cancelled) return;
 
-				if (shouldShow && info.latest) {
-					setAgentUpdate({
-						agentId: activeAgentId,
-						installed: info.installed,
-						latest: info.latest,
-					});
-				} else {
-					setAgentUpdate(null);
+					// Show the banner when the agent is installed and there's a
+					// known newer version (or when we can't read the installed
+					// version but a latest exists — the user can still choose to
+					// update). Skip if not installed (settings handles install)
+					// or if the user already dismissed this latest version.
+					const dismissKey = info.latest
+						? `${activeAgentId}@${info.latest}`
+						: "";
+					const shouldShow =
+						info.isInstalled &&
+						!!info.latest &&
+						!dismissedAgentUpdates.has(dismissKey) &&
+						// Only show if outdated, OR if we can't tell (no installed
+						// version detected — being honest that we're unsure).
+						(info.isOutdated || !info.installed);
+
+					if (shouldShow && info.latest) {
+						setAgentUpdate({
+							agentId: activeAgentId,
+							installed: info.installed,
+							latest: info.latest,
+						});
+					} else {
+						setAgentUpdate(null);
+					}
+				} catch (err) {
+					console.error("[ChatView] agent version check failed:", err);
 				}
-			} catch (err) {
-				console.error("[ChatView] agent version check failed:", err);
-			}
-		})();
+			})();
+		}, 3000); // 3-second startup grace period
+
 		return () => {
 			cancelled = true;
+			window.clearTimeout(delayId);
 		};
 	}, [
 		settings.activeAgentId,

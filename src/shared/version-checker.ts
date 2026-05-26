@@ -87,7 +87,7 @@ function runForVersion(
 		const timer = setTimeout(() => {
 			child.kill();
 			resolve(null);
-		}, 5000);
+		}, 3000);
 
 		child.on("close", () => {
 			clearTimeout(timer);
@@ -163,7 +163,7 @@ function runNpmListGlobal(nodePath: string): Promise<string> {
 		const timer = setTimeout(() => {
 			child.kill();
 			resolve("");
-		}, 10000);
+		}, 5000);
 
 		child.on("close", () => {
 			clearTimeout(timer);
