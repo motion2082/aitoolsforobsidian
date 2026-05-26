@@ -13,6 +13,7 @@ import { normalizeEnvVars } from "../../shared/settings-utils";
 import { detectNodePath, detectAgentPath, validatePath } from "../../shared/path-detector";
 import { checkAgentVersion, getNpmPackage } from "../../shared/version-checker";
 import { installAgent, getAgentDisplayName } from "../../shared/agent-installer";
+import { ErrorLogModal } from "./ErrorLogModal";
 
 export class AgentClientSettingTab extends PluginSettingTab {
 	plugin: AgentClientPlugin;
@@ -560,7 +561,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Debug mode")
 			.setDesc(
-				"Enable debug logging to console. Useful for development and troubleshooting.",
+				"Enable debug logging to console and capture the full ACP wire traffic to acp-wire.log. Useful for development and troubleshooting.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -570,6 +571,106 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		this.renderDiagnosticsSection(containerEl);
+	}
+
+	/**
+	 * Render diagnostics controls for the persistent error log.
+	 *
+	 * Errors caught by the AcpAdapter and message-service are appended as
+	 * NDJSON to <vault>/<configDir>/plugins/obsidianaitools/error.log. This
+	 * section lets users view, copy and clear that file without opening
+	 * DevTools.
+	 */
+	private renderDiagnosticsSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName("Diagnostics").setHeading();
+
+		new Setting(containerEl)
+			.setName("Error log")
+			.setDesc(
+				"Persistent log of agent failures (socket errors, prompt errors, agent stderr). Recorded automatically.",
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("View")
+					.setCta()
+					.onClick(() => {
+						new ErrorLogModal(this.app, this.plugin).open();
+					}),
+			)
+			.addButton((button) =>
+				button.setButtonText("Copy").onClick(async () => {
+					const raw = await this.plugin.errorLog.readErrorLog();
+					if (!raw) {
+						new Notice("Error log is empty.", 2000);
+						return;
+					}
+					try {
+						await navigator.clipboard.writeText(raw);
+						new Notice("Error log copied to clipboard.", 2000);
+					} catch {
+						new Notice("Failed to copy to clipboard.", 3000);
+					}
+				}),
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Clear")
+					.setWarning()
+					.onClick(async () => {
+						await this.plugin.errorLog.clearErrorLog();
+						new Notice("Error log cleared.", 2000);
+					}),
+			);
+
+		const pathInfo = containerEl.createDiv({
+			cls: "obsidianaitools-diagnostics-path",
+		});
+		pathInfo.appendText("Log file: ");
+		pathInfo.createEl("code", {
+			text: this.plugin.errorLog.getErrorLogPath(),
+		});
+
+		if (this.plugin.settings.debugMode) {
+			new Setting(containerEl)
+				.setName("ACP wire log")
+				.setDesc(
+					"Full JSON-RPC traffic captured while debug mode is on. Use this to share precise traces with maintainers.",
+				)
+				.addButton((button) =>
+					button.setButtonText("Copy").onClick(async () => {
+						const raw = await this.plugin.errorLog.readWireLog();
+						if (!raw) {
+							new Notice("Wire log is empty.", 2000);
+							return;
+						}
+						try {
+							await navigator.clipboard.writeText(raw);
+							new Notice("Wire log copied to clipboard.", 2000);
+						} catch {
+							new Notice("Failed to copy to clipboard.", 3000);
+						}
+					}),
+				)
+				.addButton((button) =>
+					button
+						.setButtonText("Clear")
+						.setWarning()
+						.onClick(async () => {
+							await this.plugin.errorLog.clearWireLog();
+							new Notice("Wire log cleared.", 2000);
+						}),
+				);
+
+			const wirePathInfo = containerEl.createDiv({
+				cls: "obsidianaitools-diagnostics-path",
+			});
+			wirePathInfo.appendText("Wire log file: ");
+			wirePathInfo.createEl("code", {
+				text: this.plugin.errorLog.getWireLogPath(),
+			});
+		}
 	}
 
 	/**
@@ -752,7 +853,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			const root = await getNpmGlobalRoot(this.plugin.settings.nodePath);
 			if (!root) return null;
 
-			const { join, dirname } = await import("path");
+			const path = await import("path");
 			const { existsSync } = await import("fs");
 			const { Platform } = await import("obsidian");
 
@@ -767,14 +868,14 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			let binDir: string;
 			if (Platform.isWin) {
 				// root = …\npm\node_modules  →  bin = …\npm
-				binDir = dirname(root);
+				binDir = path.dirname(root);
 			} else {
 				// root = …/lib/node_modules  →  prefix = …  →  bin = …/bin
-				binDir = join(dirname(dirname(root)), "bin");
+				binDir = path.join(path.dirname(path.dirname(root)), "bin");
 			}
 
 			const binaryName = Platform.isWin ? names.win : names.unix;
-			const fullPath = join(binDir, binaryName);
+			const fullPath = path.join(binDir, binaryName);
 			return existsSync(fullPath) ? fullPath : null;
 		} catch {
 			return null;

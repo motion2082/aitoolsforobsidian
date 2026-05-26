@@ -89,7 +89,7 @@ export function AgentUpdateBanner({
 								const { getNpmGlobalRoot } = await import("../../shared/version-checker");
 								const root = await getNpmGlobalRoot(plugin.settings.nodePath);
 								if (root) {
-									const { join, dirname } = await import("path");
+									const path = await import("path");
 									const { existsSync } = await import("fs");
 									const { Platform } = await import("obsidian");
 									const NAMES: Record<string, { win: string; unix: string }> = {
@@ -100,9 +100,9 @@ export function AgentUpdateBanner({
 									const names = NAMES[agentId];
 									if (names) {
 										const binDir = Platform.isWin
-											? dirname(root)
-											: join(dirname(dirname(root)), "bin");
-										const candidate = join(binDir, Platform.isWin ? names.win : names.unix);
+											? path.dirname(root)
+											: path.join(path.dirname(path.dirname(root)), "bin");
+										const candidate = path.join(binDir, Platform.isWin ? names.win : names.unix);
 										if (existsSync(candidate)) fullPath = candidate;
 									}
 								}

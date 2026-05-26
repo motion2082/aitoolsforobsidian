@@ -15,7 +15,21 @@
       "Bash(claude-code-acp:*)",
       "Bash(npm_package_version=0.7.3 node:*)",
       "Bash(git push)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(git mv:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "PowerShell(Select-String -Path \"C:\\\\Users\\\\pauld\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\@agentclientprotocol\\\\claude-agent-acp\\\\node_modules\\\\@anthropic-ai\\\\claude-agent-sdk\\\\sdk.js\" -Pattern \"ANTHROPIC_AUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL\" | Select-Object -First 20 | ForEach-Object { $_.Line.Substring\\(0, [Math]::Min\\(200, $_.Line.Length\\)\\) })",
+      "Read(//c/Users/pauld/AppData/Roaming/npm/node_modules/@agentclientprotocol/claude-agent-acp/node_modules/@anthropic-ai/claude-agent-sdk/**)",
+      "Bash(ls \"C:\\\\Users\\\\pauld\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\@anthropic-ai\\\\\" 2>/dev/null || echo \"Not found\")",
+      "Read(//c/Users/pauld/AppData/Roaming/npm/node_modules/@anthropic-ai\" 2>/dev/**)",
+      "Read(//c/Users/pauld/AppData/Roaming/npm/node_modules/@anthropic-ai/**)",
+      "Read(//c/Users/pauld/AppData/Roaming/npm/node_modules/@agentclientprotocol/claude-agent-acp/node_modules/**)",
+      "Read(//c/Users/pauld/AppData/Roaming/npm/node_modules/**)",
+      "PowerShell(npm list -g --depth=0 2>&1)"
     ]
   }
 }

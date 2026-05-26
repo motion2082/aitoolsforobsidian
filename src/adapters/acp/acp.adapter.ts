@@ -26,6 +26,7 @@ import type {
 import { AcpTypeConverter } from "./acp-type-converter";
 import { TerminalManager } from "../../shared/terminal-manager";
 import { Logger } from "../../shared/logger";
+import { describeError, logWireLine } from "../../shared/error-log";
 import type AgentClientPlugin from "../../plugin";
 import type {
 	SlashCommand,
@@ -458,10 +459,16 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		});
 
 		agentProcess.stderr?.setEncoding("utf8");
+		const currentAgentId = config.id;
 		agentProcess.stderr?.on("data", (data) => {
 			// Always log stderr so users can diagnose agent crashes without
 			// having to enable debug mode first.
 			console.error(`[AcpAdapter] ${agentLabel} stderr:`, data);
+			void this.plugin.errorLog?.logError({
+				source: "acp-stderr",
+				agentId: currentAgentId,
+				message: typeof data === "string" ? data : String(data),
+			});
 		});
 
 		// Create stream for ACP communication
@@ -478,9 +485,19 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		// is present at runtime (Node 17+) but missing from older @types/node;
 		// hence the cast.
 		/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-		const input = (Writable as any).toWeb(stdin) as WritableStream<Uint8Array>;
-		const output = (Readable as any).toWeb(stdout) as ReadableStream<Uint8Array>;
+		const rawInput = (Writable as any).toWeb(
+			stdin,
+		) as WritableStream<Uint8Array>;
+		const rawOutput = (Readable as any).toWeb(
+			stdout,
+		) as ReadableStream<Uint8Array>;
 		/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+
+		// Tap each direction for wire-frame logging. Transparent unless
+		// debug mode is on — the tap just sees lines fly past and writes
+		// them to acp-wire.log.
+		const input = this.tapWritable(rawInput, "out", config.id);
+		const output = this.tapReadable(rawOutput, "in", config.id);
 
 		this.logger.log(
 			"[AcpAdapter] Using working directory:",
@@ -786,6 +803,18 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			);
 		} catch (error: unknown) {
 			this.logger.error("[AcpAdapter] Prompt Error:", error);
+
+			const described = describeError(error);
+			void this.plugin.errorLog?.logError({
+				source: "acp-prompt-error",
+				agentId: this.currentAgentId ?? undefined,
+				sessionId,
+				message: described.message,
+				code: described.code,
+				errorKind: described.errorKind,
+				data: described.data,
+				stack: described.stack,
+			});
 
 			// Check if this is an ignorable error (empty response or user abort)
 			const errorObj = error as Record<string, unknown> | null;
@@ -1172,6 +1201,98 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	 *     GUI app inherits a minimal PATH from launchctl that usually omits
 	 *     /usr/local/bin and ~/.npm-global/bin.
 	 */
+	/**
+	 * Wrap a ReadableStream so each NDJSON frame is also written to the
+	 * wire log. The transform is bytes-in / bytes-out — no behaviour change
+	 * for the ACP library; it just sees the same lines pass through.
+	 */
+	private tapReadable(
+		source: ReadableStream<Uint8Array>,
+		direction: "in" | "out",
+		agentId: string,
+	): ReadableStream<Uint8Array> {
+		const errorLog = this.plugin.errorLog;
+		if (!errorLog) return source;
+
+		const decoder = new TextDecoder("utf-8");
+		let buffer = "";
+
+		const transform = new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) {
+				try {
+					buffer += decoder.decode(chunk, { stream: true });
+					let newlineIdx = buffer.indexOf("\n");
+					while (newlineIdx >= 0) {
+						const line = buffer.slice(0, newlineIdx).trim();
+						buffer = buffer.slice(newlineIdx + 1);
+						if (line.length > 0) {
+							void logWireLine(errorLog, direction, line, agentId);
+						}
+						newlineIdx = buffer.indexOf("\n");
+					}
+				} catch {
+					// Logging must never break the stream — drop on error.
+				}
+				controller.enqueue(chunk);
+			},
+			flush() {
+				if (buffer.trim().length > 0) {
+					void logWireLine(errorLog, direction, buffer.trim(), agentId);
+					buffer = "";
+				}
+			},
+		});
+
+		return source.pipeThrough(transform);
+	}
+
+	/**
+	 * Wrap a WritableStream so each outgoing NDJSON frame is logged.
+	 */
+	private tapWritable(
+		sink: WritableStream<Uint8Array>,
+		direction: "in" | "out",
+		agentId: string,
+	): WritableStream<Uint8Array> {
+		const errorLog = this.plugin.errorLog;
+		if (!errorLog) return sink;
+
+		const decoder = new TextDecoder("utf-8");
+		let buffer = "";
+
+		const transform = new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) {
+				try {
+					buffer += decoder.decode(chunk, { stream: true });
+					let newlineIdx = buffer.indexOf("\n");
+					while (newlineIdx >= 0) {
+						const line = buffer.slice(0, newlineIdx).trim();
+						buffer = buffer.slice(newlineIdx + 1);
+						if (line.length > 0) {
+							void logWireLine(errorLog, direction, line, agentId);
+						}
+						newlineIdx = buffer.indexOf("\n");
+					}
+				} catch {
+					// noop
+				}
+				controller.enqueue(chunk);
+			},
+			flush() {
+				if (buffer.trim().length > 0) {
+					void logWireLine(errorLog, direction, buffer.trim(), agentId);
+					buffer = "";
+				}
+			},
+		});
+
+		// Pipe the transform's readable end into the original sink.
+		void transform.readable.pipeTo(sink).catch(() => {
+			// Sink closed — ignore.
+		});
+		return transform.writable;
+	}
+
 	/**
 	 * Non-blocking async check: does the given command exist on PATH?
 	 *

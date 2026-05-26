@@ -22,6 +22,7 @@ import {
 	CustomAgentSettings,
 } from "./domain/models/agent-config";
 import type { SavedSessionInfo } from "./domain/models/session-info";
+import { ErrorLog } from "./shared/error-log";
 
 // Re-export for backward compatibility
 export type { AgentEnvVar, CustomAgentSettings };
@@ -149,6 +150,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 export default class AgentClientPlugin extends Plugin {
 	settings: AgentClientPluginSettings;
 	settingsStore!: SettingsStore;
+	errorLog!: ErrorLog;
 
 	private _acpAdapter: AcpAdapter | null = null;
 
@@ -163,6 +165,8 @@ export default class AgentClientPlugin extends Plugin {
 
 			await this.loadSettings();
 			console.debug("[AI Tools] Settings loaded successfully");
+
+			this.errorLog = new ErrorLog(this);
 
 			// Show a one-time post-upgrade notice when the plugin version changes.
 			// Helps users on the claude-code-acp → claude-agent-acp migration realise
