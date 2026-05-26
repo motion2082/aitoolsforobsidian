@@ -69,11 +69,38 @@ export function AgentUpdateBanner({
 		}
 		childProcess.on("close", (code) => {
 			if (code === 0) {
-				new Notice(
-					`${displayName} updated to ${latestVersion}.`,
-					4000,
-				);
-				onUpdated();
+				onUpdated(); // clear the banner immediately
+				// Persistent notice with Restart Now so the user knows the new
+				// binary won't be used until Obsidian re-spawns the agent.
+				const notice = new Notice("", 0);
+				const el = notice.noticeEl;
+				el.createEl("p", {
+					text: `${displayName} updated to v${latestVersion}.`,
+					cls: "obsidianaitools-upgrade-title",
+				});
+				el.createEl("p", {
+					text: "Restart Obsidian to activate the new version.",
+					cls: "obsidianaitools-upgrade-body",
+				});
+				const btnRow = el.createDiv({ cls: "obsidianaitools-upgrade-buttons" });
+				const restartBtn = btnRow.createEl("button", {
+					text: "Restart Now",
+					cls: "mod-cta obsidianaitools-upgrade-btn-restart",
+				});
+				restartBtn.addEventListener("click", () => {
+					notice.hide();
+					try {
+						(plugin.app as unknown as { commands: { executeCommandById: (id: string) => void } })
+							.commands.executeCommandById("app:reload");
+					} catch {
+						window.location.reload();
+					}
+				});
+				const laterBtn = btnRow.createEl("button", {
+					text: "Later",
+					cls: "obsidianaitools-upgrade-btn-later",
+				});
+				laterBtn.addEventListener("click", () => notice.hide());
 			} else {
 				const full = buf.join("");
 				console.error(
