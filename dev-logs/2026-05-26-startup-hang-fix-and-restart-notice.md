@@ -1,4 +1,4 @@
-# Dev Log — 2026-05-26 — Fix 10 s startup hang & prominent restart notice
+# Dev Log — 2026-05-26 — Fix 10 s startup hang, restart notices & compat warning
 
 ## Version: 0.9.0 (patch)
 
@@ -120,27 +120,142 @@ primary/secondary controls. Corresponding CSS added to `styles.css`.
 
 ---
 
-### Files touched
+### 5. Restart Now after npm install (banner + settings)
+
+**Status**: ✅ Complete
+
+**Files changed:**
+- `src/components/chat/AgentUpdateBanner.tsx`
+- `src/components/settings/AgentClientSettingTab.ts`
+
+After a successful `npm install`, both the chat-view Update button and the
+Settings Update button previously showed a 4-second auto-dismissing Notice
+with no call to action. Replaced with the same persistent Restart Now /
+Later pattern used for plugin upgrades.
+
+---
+
+### 6. Auto-save command path after install (fixes stale settings on Linux/Mac)
+
+**Status**: ✅ Complete
+
+**Files changed:**
+- `src/components/chat/AgentUpdateBanner.tsx`
+- `src/components/settings/AgentClientSettingTab.ts`
+
+**Problem:** After a successful `npm install -g`, the settings page
+re-ran `checkAgentVersion` but the `commandPath` setting was still empty
+(nothing was auto-saved). On Linux/Mac, detection falls through to
+login-shell `which` + hardcoded paths. If the binary landed somewhere
+not covered (e.g. nvm-managed node at `~/.nvm/versions/node/vXX/bin/`),
+all paths miss and settings shows "Not installed" even though the install
+succeeded.
+
+**Fix:** After a successful install, `detectAgentPath()` is called and the
+result is saved to `settings.<agent>.command` (only when no path was
+previously configured — never overwrites a deliberate manual setting).
+`runCheck()` then uses the fast `existsSync` path and reflects the real
+installed state immediately.
+
+**Detection chain on Linux** (for reference when debugging):
+1. `existsSync(savedCommandPath)` — skipped if empty
+2. `/bin/bash -l -c "which 'claude-agent-acp'"` via `spawnSync`
+3. `existsSync` on hardcoded paths: `/usr/bin/`, `/usr/local/bin/`,
+   `~/.npm-global/bin/`
+4. `npm root -g` (async, 3 s timeout)
+5. `npm list -g --json` (async, 5 s timeout)
+
+---
+
+### 7. Agent compatibility version warning
+
+**Status**: ✅ Complete
+
+**Files changed:**
+- `src/shared/version-checker.ts` — `AGENT_MAX_TESTED_VERSIONS` map,
+  `isAboveTestedVersion` + `maxTestedVersion` added to `VersionInfo`
+- `src/plugin.ts` — `compatWarningDismissed: Record<string, string>`
+  added to settings
+- `src/components/chat/ChatView.tsx` — `compatWarning` state,
+  warning banner render
+- `styles.css` — compat warning banner styles
+
+**Motivation:** `claude-agent-acp` has already shipped one breaking change
+(v0.37.0 rename + SDK bump). Future versions could change the ACP protocol,
+rename methods, or add required auth flows — all of which would silently
+break sessions with a confusing error.
+
+**Design:**
+
+A `AGENT_MAX_TESTED_VERSIONS` map in `version-checker.ts` records the
+highest agent version explicitly verified with each plugin release:
+
+```typescript
+export const AGENT_MAX_TESTED_VERSIONS: Record<string, string> = {
+    "claude-code-acp": "0.37.0",
+    "gemini-cli":      "0.43.0",
+};
+```
+
+When `checkAgentVersion` detects an installed version above the max
+tested, it sets `isAboveTestedVersion = true`. ChatView shows a yellow
+warning banner 3 seconds after startup (same delay as the update check):
+
+> ⚠️ Claude Agent v0.38.0 is newer than the tested version (v0.37.0) —
+> if you hit issues, check for a plugin update.  `[Dismiss]`
+
+**Dismiss behaviour:** Dismissal is persisted to settings
+(`compatWarningDismissed[agentId] = installedVersion`). The warning
+won't reappear for that specific version across restarts — only if a
+newer untested version is installed. This answers the "shows every
+startup?" concern: no, once per installed version.
+
+**Not a hard block:** The warning is informational only. Users can
+still install/update/use the agent freely. It gives early signal to
+report issues before assuming the plugin is broken.
+
+**Workflow for maintainer:** When a new agent version ships and is
+verified working, bump the one-liner in `version-checker.ts` and
+ship a plugin update. If you don't test it, users see the yellow
+warning and know to check for a plugin update before filing bugs.
+
+---
+
+### Files touched (full session)
 
 ```
 M  src/adapters/acp/acp.adapter.ts    spawnSync → spawn (commandExistsAsync)
-M  src/components/chat/ChatView.tsx   3-second delay on version-check effect
-M  src/plugin.ts                      persistent restart notice with button
-M  src/shared/version-checker.ts      10s → 5s, 5s → 3s timeouts
-M  styles.css                         upgrade-notice button-row styles
+M  src/components/chat/AgentUpdateBanner.tsx
+                                      Restart Now after install,
+                                      auto-save command path
+M  src/components/chat/ChatView.tsx   3-second delay on version-check effect,
+                                      compatWarning state + banner render
+M  src/components/settings/AgentClientSettingTab.ts
+                                      Restart Now after install,
+                                      autoSaveCommandPath(),
+                                      auto-save after successful install
+M  src/plugin.ts                      persistent restart notice with button,
+                                      compatWarningDismissed setting
+M  src/shared/version-checker.ts      10s → 5s, 5s → 3s timeouts,
+                                      AGENT_MAX_TESTED_VERSIONS,
+                                      isAboveTestedVersion + maxTestedVersion
+M  styles.css                         upgrade-notice button-row styles,
+                                      compat-warning banner styles
 ```
 
 ---
 
 ### Tested
 
-- ✅ TypeScript build clean (`tsc -noEmit -skipLibCheck`)
-- ✅ Paul's Obsidian — pushed and deployed
+- ✅ TypeScript build clean
+- ✅ Windows — install, update banner, restart notice all working
+- ✅ Linux — install succeeds, restart notice shows, settings no longer stale
+- ✅ Rollback to 0.36.1 triggers update banner after 3 s
 
 ### Not yet tested
 
-- Cold-start timing on macOS (login shell async path)
-- "Restart Now" button in a live Obsidian instance
+- Mac cold-start (login shell async path, auto-save after install)
+- Compat warning banner end-to-end (requires agent version > 0.37.0)
 
 ---
 
