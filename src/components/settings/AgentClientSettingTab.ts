@@ -688,6 +688,33 @@ export class AgentClientSettingTab extends PluginSettingTab {
 	}
 
 	/**
+	 * After a successful npm install, auto-detect the binary path and persist
+	 * it so subsequent version checks use the fast existsSync path instead of
+	 * falling through to slow npm spawns. Only saves when no path is already
+	 * configured (don't overwrite a deliberate manual setting).
+	 */
+	private async autoSaveCommandPath(agentId: string): Promise<void> {
+		try {
+			const { detectAgentPath } = await import("../../shared/path-detector");
+			const detected = detectAgentPath(agentId);
+			if (!detected.path) return;
+			const s = this.plugin.settings;
+			if (agentId === s.claude.id && !s.claude.command) {
+				s.claude.command = detected.path;
+			} else if (agentId === s.codex.id && !s.codex.command) {
+				s.codex.command = detected.path;
+			} else if (agentId === s.gemini.id && !s.gemini.command) {
+				s.gemini.command = detected.path;
+			} else {
+				return; // already configured or custom agent
+			}
+			await this.plugin.saveSettings();
+		} catch {
+			// Non-critical — version check will fall back to detection
+		}
+	}
+
+	/**
 	 * Render a prominent "System status" section at the top of settings that
 	 * surfaces node, npm, and each known agent's npm-package version in one
 	 * glance. Node and npm are display-only (deliberately no update button —
@@ -859,6 +886,10 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			}
 			childProcess.on("close", (code) => {
 				if (code === 0) {
+					// Auto-detect the installed binary and save the path to
+					// settings so the version check re-run uses the fast path
+					// (avoids showing "Not installed" on Linux/Mac after install).
+					void this.autoSaveCommandPath(agentId).then(() => void runCheck());
 					// Persistent notice with Restart Now so the user knows the
 					// new binary won't be used until Obsidian re-spawns the agent.
 					const notice = new Notice("", 0);
@@ -904,8 +935,8 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						`Update failed (exit ${code}). ${summary} See dev console for full log.`,
 						10000,
 					);
+					void runCheck(); // re-check on failure too
 				}
-				void runCheck();
 			});
 			childProcess.on("error", (err) => {
 				new Notice(`Update error: ${err.message}`, 6000);

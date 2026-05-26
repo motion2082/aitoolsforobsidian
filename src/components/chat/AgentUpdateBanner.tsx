@@ -70,6 +70,30 @@ export function AgentUpdateBanner({
 		childProcess.on("close", (code) => {
 			if (code === 0) {
 				onUpdated(); // clear the banner immediately
+				// Auto-save the detected command path so subsequent version
+				// checks use the fast existsSync path (fixes "Not installed"
+				// shown in settings on Linux/Mac after a fresh install).
+				void (async () => {
+					try {
+						const { detectAgentPath } = await import("../../shared/path-detector");
+						const detected = detectAgentPath(agentId);
+						if (detected.path) {
+							const s = plugin.settings;
+							if (agentId === s.claude.id && !s.claude.command) {
+								s.claude.command = detected.path;
+								await plugin.saveSettings();
+							} else if (agentId === s.codex.id && !s.codex.command) {
+								s.codex.command = detected.path;
+								await plugin.saveSettings();
+							} else if (agentId === s.gemini.id && !s.gemini.command) {
+								s.gemini.command = detected.path;
+								await plugin.saveSettings();
+							}
+						}
+					} catch {
+						// Non-critical
+					}
+				})();
 				// Persistent notice with Restart Now so the user knows the new
 				// binary won't be used until Obsidian re-spawns the agent.
 				const notice = new Notice("", 0);
