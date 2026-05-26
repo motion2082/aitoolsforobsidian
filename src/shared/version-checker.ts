@@ -125,7 +125,7 @@ export async function getNodeVersion(nodePath: string): Promise<string | null> {
 }
 
 /** Ask npm for its global modules root (e.g. `%APPDATA%/npm/node_modules`). */
-async function getNpmGlobalRoot(nodePath: string): Promise<string | null> {
+export async function getNpmGlobalRoot(nodePath: string): Promise<string | null> {
 	return runForVersion("npm", ["root", "-g"], nodePath);
 }
 

@@ -75,18 +75,50 @@ export function AgentUpdateBanner({
 				// shown in settings on Linux/Mac after a fresh install).
 				void (async () => {
 					try {
+						// Save if empty OR bare name — bare names fail existsSync
+						const isBare = (cmd: string) =>
+							!!cmd && !cmd.includes("/") && !cmd.includes("\\");
+						const needsSave = (cmd: string) => !cmd || isBare(cmd);
+
 						const { detectAgentPath } = await import("../../shared/path-detector");
-						const detected = detectAgentPath(agentId);
-						if (detected.path) {
+						let fullPath = detectAgentPath(agentId).path;
+
+						// Fallback: derive from npm root -g when which fails
+						if (!fullPath) {
+							try {
+								const { getNpmGlobalRoot } = await import("../../shared/version-checker");
+								const root = await getNpmGlobalRoot(plugin.settings.nodePath);
+								if (root) {
+									const { join, dirname } = await import("path");
+									const { existsSync } = await import("fs");
+									const { Platform } = await import("obsidian");
+									const NAMES: Record<string, { win: string; unix: string }> = {
+										"claude-code-acp": { win: "claude-agent-acp.cmd", unix: "claude-agent-acp" },
+										"codex-acp":       { win: "codex-acp.cmd",        unix: "codex-acp" },
+										"gemini-cli":      { win: "gemini.cmd",            unix: "gemini" },
+									};
+									const names = NAMES[agentId];
+									if (names) {
+										const binDir = Platform.isWin
+											? dirname(root)
+											: join(dirname(dirname(root)), "bin");
+										const candidate = join(binDir, Platform.isWin ? names.win : names.unix);
+										if (existsSync(candidate)) fullPath = candidate;
+									}
+								}
+							} catch { /* non-critical */ }
+						}
+
+						if (fullPath) {
 							const s = plugin.settings;
-							if (agentId === s.claude.id && !s.claude.command) {
-								s.claude.command = detected.path;
+							if (agentId === s.claude.id && needsSave(s.claude.command)) {
+								s.claude.command = fullPath;
 								await plugin.saveSettings();
-							} else if (agentId === s.codex.id && !s.codex.command) {
-								s.codex.command = detected.path;
+							} else if (agentId === s.codex.id && needsSave(s.codex.command)) {
+								s.codex.command = fullPath;
 								await plugin.saveSettings();
-							} else if (agentId === s.gemini.id && !s.gemini.command) {
-								s.gemini.command = detected.path;
+							} else if (agentId === s.gemini.id && needsSave(s.gemini.command)) {
+								s.gemini.command = fullPath;
 								await plugin.saveSettings();
 							}
 						}

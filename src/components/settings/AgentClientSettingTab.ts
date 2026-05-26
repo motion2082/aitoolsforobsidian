@@ -688,29 +688,96 @@ export class AgentClientSettingTab extends PluginSettingTab {
 	}
 
 	/**
+	 * True when a command string is a bare executable name with no directory
+	 * component (e.g. "claude-agent-acp"). existsSync always returns false for
+	 * bare names, so they must be replaced with full paths for reliable checks.
+	 */
+	private static isBareCommand(cmd: string): boolean {
+		return !!cmd && !cmd.includes("/") && !cmd.includes("\\");
+	}
+
+	/**
 	 * After a successful npm install, auto-detect the binary path and persist
 	 * it so subsequent version checks use the fast existsSync path instead of
-	 * falling through to slow npm spawns. Only saves when no path is already
-	 * configured (don't overwrite a deliberate manual setting).
+	 * falling through to slow npm spawns.
+	 *
+	 * Saves when the command is empty OR is a bare name (no path separator) —
+	 * bare names fail existsSync so the settings always show "Not installed".
+	 * Never overwrites a path that already contains a directory separator.
 	 */
 	private async autoSaveCommandPath(agentId: string): Promise<void> {
 		try {
+			// 1. Standard detection: which/where + common filesystem paths.
 			const { detectAgentPath } = await import("../../shared/path-detector");
-			const detected = detectAgentPath(agentId);
-			if (!detected.path) return;
+			let fullPath = detectAgentPath(agentId).path;
+
+			// 2. Fallback: derive the bin directory from `npm root -g`.
+			//    Reliable right after install even when the login shell hasn't
+			//    picked up the new PATH (common on Linux GUI apps).
+			if (!fullPath) {
+				fullPath = await this.detectPathFromNpmRoot(agentId);
+			}
+
+			if (!fullPath) return;
+
 			const s = this.plugin.settings;
-			if (agentId === s.claude.id && !s.claude.command) {
-				s.claude.command = detected.path;
-			} else if (agentId === s.codex.id && !s.codex.command) {
-				s.codex.command = detected.path;
-			} else if (agentId === s.gemini.id && !s.gemini.command) {
-				s.gemini.command = detected.path;
+			const needsSave = (cmd: string) =>
+				!cmd || AgentClientSettingTab.isBareCommand(cmd);
+
+			if (agentId === s.claude.id && needsSave(s.claude.command)) {
+				s.claude.command = fullPath;
+			} else if (agentId === s.codex.id && needsSave(s.codex.command)) {
+				s.codex.command = fullPath;
+			} else if (agentId === s.gemini.id && needsSave(s.gemini.command)) {
+				s.gemini.command = fullPath;
 			} else {
-				return; // already configured or custom agent
+				return;
 			}
 			await this.plugin.saveSettings();
 		} catch {
 			// Non-critical — version check will fall back to detection
+		}
+	}
+
+	/**
+	 * Derive the agent binary path from `npm root -g`.
+	 * npm root -g  →  e.g. /usr/local/lib/node_modules  (Unix)
+	 *                      C:\Users\…\npm\node_modules   (Windows)
+	 * Bin dir      →       /usr/local/bin                (Unix, up two + /bin)
+	 *                      C:\Users\…\npm                (Windows, up one)
+	 */
+	private async detectPathFromNpmRoot(agentId: string): Promise<string | null> {
+		try {
+			const { getNpmGlobalRoot } = await import("../../shared/version-checker");
+			const root = await getNpmGlobalRoot(this.plugin.settings.nodePath);
+			if (!root) return null;
+
+			const { join, dirname } = await import("path");
+			const { existsSync } = await import("fs");
+			const { Platform } = await import("obsidian");
+
+			const BINARY_NAMES: Record<string, { win: string; unix: string }> = {
+				"claude-code-acp": { win: "claude-agent-acp.cmd", unix: "claude-agent-acp" },
+				"codex-acp":       { win: "codex-acp.cmd",        unix: "codex-acp" },
+				"gemini-cli":      { win: "gemini.cmd",            unix: "gemini" },
+			};
+			const names = BINARY_NAMES[agentId];
+			if (!names) return null;
+
+			let binDir: string;
+			if (Platform.isWin) {
+				// root = …\npm\node_modules  →  bin = …\npm
+				binDir = dirname(root);
+			} else {
+				// root = …/lib/node_modules  →  prefix = …  →  bin = …/bin
+				binDir = join(dirname(dirname(root)), "bin");
+			}
+
+			const binaryName = Platform.isWin ? names.win : names.unix;
+			const fullPath = join(binDir, binaryName);
+			return existsSync(fullPath) ? fullPath : null;
+		} catch {
+			return null;
 		}
 	}
 
