@@ -144,6 +144,25 @@ const COMMON_AGENT_PATHS: Record<string, string[]> = {
 		`${homedir()}/.npm-global/bin/claude-code-acp`,
 		`${homedir()}/.npm-global/bin/codex-acp`,
 		`${homedir()}/.npm-global/bin/gemini`,
+		// NVM installs under ~/.nvm/versions/node/<version>/bin — enumerate all
+		// installed versions so the detector finds the agent regardless of which
+		// node version is currently active.
+		...(() => {
+			try {
+				const nvmDir = join(homedir(), ".nvm", "versions", "node");
+				if (existsSync(nvmDir)) {
+					return readdirSync(nvmDir).flatMap((v) => [
+						join(nvmDir, v, "bin", "claude-agent-acp"),
+						join(nvmDir, v, "bin", "claude-code-acp"),
+						join(nvmDir, v, "bin", "codex-acp"),
+						join(nvmDir, v, "bin", "gemini"),
+					]);
+				}
+			} catch {
+				// ignore
+			}
+			return [];
+		})(),
 	],
 	// Windows — use process.env.APPDATA for the actual user path
 	win32: [
@@ -281,7 +300,10 @@ export function detectAgentPath(agentId: string): PathDetectionResult {
 						[
 							"-l",
 							"-c",
-							`which '${name.replace(/'/g, "'\\''")}'`,
+							// On Linux, NVM is typically sourced in ~/.bashrc
+							// which login shells (-l) do NOT source. Explicitly
+							// load nvm.sh so its PATH additions are available.
+							`[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"; which '${name.replace(/'/g, "'\\''")}'`,
 						],
 						{ encoding: "utf-8" as const, timeout: 5000 },
 					);
