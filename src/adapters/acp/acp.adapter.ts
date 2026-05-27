@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from "child_process";
 import { existsSync } from "fs";
-import { Readable, Writable } from "stream";
+import { Readable, Writable, Transform } from "stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { Platform } from "obsidian";
 
@@ -480,24 +480,94 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		const stdin = agentProcess.stdin;
 		const stdout = agentProcess.stdout;
 
-		// Use Node.js's native stream-to-web converters rather than manually
-		// wrapping the Node streams with Chromium's WHATWG globals. `.toWeb`
-		// is present at runtime (Node 17+) but missing from older @types/node;
-		// hence the cast.
-		/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-		const rawInput = (Writable as any).toWeb(
-			stdin,
-		) as WritableStream<Uint8Array>;
-		const rawOutput = (Readable as any).toWeb(
-			stdout,
-		) as ReadableStream<Uint8Array>;
-		/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+		// Wire-tap using Node.js Transform streams — must be done BEFORE
+		// calling .toWeb() so we never mix Node.js Web Streams with Chromium's
+		// WHATWG Web Streams. Mixing them causes:
+		//   "transform.readable must be an instance of ReadableStream.
+		//    Received an instance of ReadableStream"
+		// because Node's ReadableStream and Chromium's ReadableStream are
+		// different classes even though they implement the same spec.
+		const errorLog = this.plugin.errorLog;
+		const tapAgentId = config.id;
 
-		// Tap each direction for wire-frame logging. Transparent unless
-		// debug mode is on — the tap just sees lines fly past and writes
-		// them to acp-wire.log.
-		const input = this.tapWritable(rawInput, "out", config.id);
-		const output = this.tapReadable(rawOutput, "in", config.id);
+		// Outgoing tap: ACP SDK → stdinTap (logs) → process stdin
+		let outBuffer = "";
+		const stdinTap = new Transform({
+			transform(
+				chunk: Buffer,
+				_enc: BufferEncoding,
+				done: (err?: Error | null, data?: Buffer) => void,
+			) {
+				if (errorLog) {
+					try {
+						outBuffer += chunk.toString("utf-8");
+						let idx = outBuffer.indexOf("\n");
+						while (idx >= 0) {
+							const line = outBuffer.slice(0, idx).trim();
+							outBuffer = outBuffer.slice(idx + 1);
+							if (line.length > 0) {
+								void logWireLine(errorLog, "out", line, tapAgentId);
+							}
+							idx = outBuffer.indexOf("\n");
+						}
+					} catch {
+						// Logging must never break the stream.
+					}
+				}
+				done(null, chunk);
+			},
+			flush(done: (err?: Error | null) => void) {
+				if (errorLog && outBuffer.trim().length > 0) {
+					void logWireLine(errorLog, "out", outBuffer.trim(), tapAgentId);
+					outBuffer = "";
+				}
+				done();
+			},
+		});
+		stdinTap.pipe(stdin);
+
+		// Incoming tap: process stdout → stdoutTap (logs) → ACP SDK
+		let inBuffer = "";
+		const stdoutTap = new Transform({
+			transform(
+				chunk: Buffer,
+				_enc: BufferEncoding,
+				done: (err?: Error | null, data?: Buffer) => void,
+			) {
+				if (errorLog) {
+					try {
+						inBuffer += chunk.toString("utf-8");
+						let idx = inBuffer.indexOf("\n");
+						while (idx >= 0) {
+							const line = inBuffer.slice(0, idx).trim();
+							inBuffer = inBuffer.slice(idx + 1);
+							if (line.length > 0) {
+								void logWireLine(errorLog, "in", line, tapAgentId);
+							}
+							idx = inBuffer.indexOf("\n");
+						}
+					} catch {
+						// Logging must never break the stream.
+					}
+				}
+				done(null, chunk);
+			},
+			flush(done: (err?: Error | null) => void) {
+				if (errorLog && inBuffer.trim().length > 0) {
+					void logWireLine(errorLog, "in", inBuffer.trim(), tapAgentId);
+					inBuffer = "";
+				}
+				done();
+			},
+		});
+		stdout.pipe(stdoutTap);
+
+		// Convert tapped Node.js streams to Web Streams for the ACP SDK.
+		// Both sides are now pure Node.js streams — no Chromium/Node mismatch.
+		/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+		const input = (Writable as any).toWeb(stdinTap) as WritableStream<Uint8Array>;
+		const output = (Readable as any).toWeb(stdoutTap) as ReadableStream<Uint8Array>;
+		/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 		this.logger.log(
 			"[AcpAdapter] Using working directory:",
@@ -1189,119 +1259,6 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		};
 	}
 
-	/**
-	 * Check whether a command can be resolved on this system.
-	 * Accepts either a full path or a bare command name.
-	 *
-	 * Mirrors the actual spawn flow on each platform so the check sees the
-	 * same PATH the agent process will:
-	 *   - Windows: enhanced PATH from the registry + nodePath setting
-	 *   - macOS/Linux: a login shell, so .zshrc/.bash_profile contribute the
-	 *     same PATH entries the agent gets. Critical because Obsidian as a
-	 *     GUI app inherits a minimal PATH from launchctl that usually omits
-	 *     /usr/local/bin and ~/.npm-global/bin.
-	 */
-	/**
-	 * Wrap a ReadableStream so each NDJSON frame is also written to the
-	 * wire log. The transform is bytes-in / bytes-out — no behaviour change
-	 * for the ACP library; it just sees the same lines pass through.
-	 */
-	private tapReadable(
-		source: ReadableStream<Uint8Array>,
-		direction: "in" | "out",
-		agentId: string,
-	): ReadableStream<Uint8Array> {
-		const errorLog = this.plugin.errorLog;
-		if (!errorLog) return source;
-
-		const decoder = new TextDecoder("utf-8");
-		let buffer = "";
-
-		const transform = new TransformStream<Uint8Array, Uint8Array>({
-			transform(chunk, controller) {
-				try {
-					buffer += decoder.decode(chunk, { stream: true });
-					let newlineIdx = buffer.indexOf("\n");
-					while (newlineIdx >= 0) {
-						const line = buffer.slice(0, newlineIdx).trim();
-						buffer = buffer.slice(newlineIdx + 1);
-						if (line.length > 0) {
-							void logWireLine(errorLog, direction, line, agentId);
-						}
-						newlineIdx = buffer.indexOf("\n");
-					}
-				} catch {
-					// Logging must never break the stream — drop on error.
-				}
-				controller.enqueue(chunk);
-			},
-			flush() {
-				if (buffer.trim().length > 0) {
-					void logWireLine(errorLog, direction, buffer.trim(), agentId);
-					buffer = "";
-				}
-			},
-		});
-
-		return source.pipeThrough(transform);
-	}
-
-	/**
-	 * Wrap a WritableStream so each outgoing NDJSON frame is logged.
-	 */
-	private tapWritable(
-		sink: WritableStream<Uint8Array>,
-		direction: "in" | "out",
-		agentId: string,
-	): WritableStream<Uint8Array> {
-		const errorLog = this.plugin.errorLog;
-		if (!errorLog) return sink;
-
-		const decoder = new TextDecoder("utf-8");
-		let buffer = "";
-
-		const transform = new TransformStream<Uint8Array, Uint8Array>({
-			transform(chunk, controller) {
-				try {
-					buffer += decoder.decode(chunk, { stream: true });
-					let newlineIdx = buffer.indexOf("\n");
-					while (newlineIdx >= 0) {
-						const line = buffer.slice(0, newlineIdx).trim();
-						buffer = buffer.slice(newlineIdx + 1);
-						if (line.length > 0) {
-							void logWireLine(errorLog, direction, line, agentId);
-						}
-						newlineIdx = buffer.indexOf("\n");
-					}
-				} catch {
-					// noop
-				}
-				controller.enqueue(chunk);
-			},
-			flush() {
-				if (buffer.trim().length > 0) {
-					void logWireLine(errorLog, direction, buffer.trim(), agentId);
-					buffer = "";
-				}
-			},
-		});
-
-		// Pipe the transform's readable end into the original sink.
-		void transform.readable.pipeTo(sink).catch(() => {
-			// Sink closed — ignore.
-		});
-		return transform.writable;
-	}
-
-	/**
-	 * Non-blocking async check: does the given command exist on PATH?
-	 *
-	 * Uses async `spawn` instead of `spawnSync` so the JS event loop is
-	 * never blocked (spawnSync freezes the Electron renderer for its full
-	 * timeout duration). On timeout we resolve `true` — a false-positive is
-	 * safer than a false-negative because the actual spawn attempt will
-	 * report a meaningful error if the binary really isn't there.
-	 */
 	private commandExistsAsync(command: string): Promise<boolean> {
 		// Full path: just stat it synchronously — always instant.
 		if (
