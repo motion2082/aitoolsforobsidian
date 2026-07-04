@@ -1,6 +1,6 @@
 # Dev Log — 2026-07-04 — Coalesce streaming chunks in the ACP wire log
 
-## Version: 0.9.4 (patch)
+## Version: 0.9.5 (patch)
 
 ---
 
