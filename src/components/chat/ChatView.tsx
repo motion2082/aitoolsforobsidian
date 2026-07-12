@@ -544,8 +544,31 @@ function ChatComponent({
 		],
 	);
 
+	/**
+	 * Queue a message while the agent is streaming; it auto-sends when the
+	 * current turn finishes. Options are captured at queue time, matching
+	 * handleSendMessage.
+	 */
+	const handleQueueMessage = useCallback(
+		(content: string, images?: ImagePromptContent[]) => {
+			chat.queueMessage(content, {
+				activeNote: autoMention.activeNote,
+				vaultBasePath:
+					(plugin.app.vault.adapter as VaultAdapterWithBasePath)
+						.basePath || "",
+				isAutoMentionDisabled: autoMention.isDisabled,
+				images,
+			});
+		},
+		[chat, autoMention, plugin],
+	);
+
 	const handleStopGeneration = useCallback(async () => {
 		logger.log("Cancelling current operation...");
+		// Keep the queue on stop (chips stay, nothing is lost) but make
+		// sure the cancelled turn's settlement doesn't auto-send the next
+		// queued message — it resumes after the next sent message instead.
+		chat.suspendQueueFlush();
 		// Save last user message before cancel (to restore it)
 		const lastMessage = chat.lastUserMessage;
 		await agentSession.cancelOperation();
@@ -553,7 +576,7 @@ function ChatComponent({
 		if (lastMessage) {
 			setRestoredMessage(lastMessage);
 		}
-	}, [logger, agentSession, chat.lastUserMessage]);
+	}, [logger, agentSession, chat.suspendQueueFlush, chat.lastUserMessage]);
 
 	const handleSendMessageFromPermission = useCallback(
 		async (content: string) => {
@@ -1112,6 +1135,9 @@ function ChatComponent({
 				plugin={plugin}
 				view={view}
 				onSendMessage={handleSendMessage}
+				onQueueMessage={handleQueueMessage}
+				queuedMessages={chat.queuedMessages}
+				onRemoveQueuedMessage={chat.removeQueuedMessage}
 				onStopGeneration={handleStopGeneration}
 				onRestoredMessageConsumed={handleRestoredMessageConsumed}
 				modes={session.modes}

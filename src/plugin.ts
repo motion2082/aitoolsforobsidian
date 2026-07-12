@@ -34,6 +34,20 @@ export type { AgentEnvVar, CustomAgentSettings };
  */
 export type SendMessageShortcut = "enter" | "cmd-enter";
 
+/**
+ * A user-defined quick prompt, managed in settings.
+ * Fired from the chip row above the composer or the `!` menu in the input.
+ */
+export interface QuickPromptSetting {
+	id: string;
+	/** Label shown on the chip and in the `!` menu */
+	name: string;
+	/** Message text sent to the agent (may contain @[[wikilink]] mentions) */
+	prompt: string;
+	/** true: fire immediately; false: insert into composer for editing */
+	sendImmediately: boolean;
+}
+
 export interface AgentClientPluginSettings {
 	gemini: Omit<GeminiAgentSettings, "apiKey">;
 	claude: Omit<ClaudeAgentSettings, "apiKey">;
@@ -59,6 +73,8 @@ export interface AgentClientPluginSettings {
 	windowsWslDistribution?: string;
 	// Input behavior
 	sendMessageShortcut: SendMessageShortcut;
+	// Quick prompts (chip row above the composer + `!` menu)
+	quickPrompts: QuickPromptSetting[];
 	// Display settings
 	displaySettings: {
 		autoCollapseDiffs: boolean;
@@ -137,6 +153,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	windowsWslMode: false,
 	windowsWslDistribution: undefined,
 	sendMessageShortcut: "enter",
+	quickPrompts: [],
 	displaySettings: {
 		autoCollapseDiffs: false,
 		diffCollapseThreshold: 10,
@@ -639,6 +656,26 @@ export default class AgentClientPlugin extends Plugin {
 				rawSettings.sendMessageShortcut === "cmd-enter"
 					? rawSettings.sendMessageShortcut
 					: DEFAULT_SETTINGS.sendMessageShortcut,
+			quickPrompts: Array.isArray(rawSettings.quickPrompts)
+				? rawSettings.quickPrompts
+						.filter(
+							(qp: unknown): qp is Record<string, unknown> =>
+								typeof qp === "object" && qp !== null,
+						)
+						.map((qp) => ({
+							id:
+								typeof qp.id === "string" && qp.id.length > 0
+									? qp.id
+									: crypto.randomUUID(),
+							name: typeof qp.name === "string" ? qp.name : "",
+							prompt:
+								typeof qp.prompt === "string" ? qp.prompt : "",
+							sendImmediately:
+								typeof qp.sendImmediately === "boolean"
+									? qp.sendImmediately
+									: true,
+						}))
+				: DEFAULT_SETTINGS.quickPrompts,
 			displaySettings: (() => {
 				const rawDisplay = rawSettings.displaySettings as
 					| Record<string, unknown>
