@@ -1651,6 +1651,10 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* ===== Quick Prompts (settings sub-page) ===== */
+.obsidianaitools-qp-nav-row {
+	cursor: pointer;
+}
+
 .obsidianaitools-qp-page-header {
 	display: flex;
 	align-items: center;

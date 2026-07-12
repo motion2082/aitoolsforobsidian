@@ -342,24 +342,20 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		if (!Array.isArray(this.plugin.settings.quickPrompts)) {
 			this.plugin.settings.quickPrompts = [];
 		}
-		const quickPromptCount = this.plugin.settings.quickPrompts.length;
-		new Setting(containerEl)
+		// Whole row is clickable (Meta Bind-style nav row with a chevron)
+		const navSetting = new Setting(containerEl)
 			.setName("Prompts")
 			.setDesc(
 				"Reusable prompts shown as chips above the message box. Typing an exclamation mark in the message box searches them.",
 			)
-			.addButton((button) => {
-				button
-					.setButtonText(
-						quickPromptCount === 1
-							? "1 prompt"
-							: `${quickPromptCount} prompts`,
-					)
-					.onClick(() => {
-						this.showQuickPromptsPage = true;
-						this.display();
-					});
+			.addExtraButton((button) => {
+				button.setIcon("chevron-right").setTooltip("Manage prompts");
 			});
+		navSetting.settingEl.addClass("obsidianaitools-qp-nav-row");
+		navSetting.settingEl.addEventListener("click", () => {
+			this.showQuickPromptsPage = true;
+			this.display();
+		});
 
 		// ─────────────────────────────────────────────────────────────────────
 		// Display
