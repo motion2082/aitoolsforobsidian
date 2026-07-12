@@ -601,14 +601,23 @@ function ChatComponent({
 		// Stop kills only the current response — a queued message then
 		// proceeds naturally when the cancelled turn settles (× on a chip
 		// is the gesture for cancelling queued items).
-		// Save last user message before cancel (to restore it)
-		const lastMessage = chat.lastUserMessage;
+		//
+		// Restore the stopped message to the composer ONLY when nothing is
+		// queued: with a queue, the next turn starts immediately and
+		// restored text would flip the send button out of stop mode (a
+		// filled composer means queue/steer) and leave stale text behind.
+		const lastMessage =
+			chat.queuedMessages.length > 0 ? null : chat.lastUserMessage;
 		await agentSession.cancelOperation();
-		// Restore the last user message to input field
 		if (lastMessage) {
 			setRestoredMessage(lastMessage);
 		}
-	}, [logger, agentSession, chat.lastUserMessage]);
+	}, [
+		logger,
+		agentSession,
+		chat.queuedMessages.length,
+		chat.lastUserMessage,
+	]);
 
 	const handleSendMessageFromPermission = useCallback(
 		async (content: string) => {
