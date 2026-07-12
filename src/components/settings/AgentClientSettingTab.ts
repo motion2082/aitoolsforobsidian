@@ -32,6 +32,8 @@ export class AgentClientSettingTab extends PluginSettingTab {
 	private unsubscribe: (() => void) | null = null;
 	/** Whether the quick-prompts sub-page is showing instead of main settings */
 	private showQuickPromptsPage = false;
+	/** Main-page scroll position, captured when entering a sub-page */
+	private mainScrollPos = { container: 0, parent: 0 };
 	/** Index being dragged in the quick-prompts list, if any */
 	private qpDragIndex: number | null = null;
 
@@ -353,6 +355,11 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			});
 		navSetting.settingEl.addClass("obsidianaitools-qp-nav-row");
 		navSetting.settingEl.addEventListener("click", () => {
+			// Remember where the user was so Back returns them here
+			this.mainScrollPos = {
+				container: this.containerEl.scrollTop,
+				parent: this.containerEl.parentElement?.scrollTop ?? 0,
+			};
 			this.showQuickPromptsPage = true;
 			this.display();
 		});
@@ -1587,6 +1594,12 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		backBtn.addEventListener("click", () => {
 			this.showQuickPromptsPage = false;
 			this.display();
+			// Return to where the user was on the main page
+			this.containerEl.scrollTop = this.mainScrollPos.container;
+			if (this.containerEl.parentElement) {
+				this.containerEl.parentElement.scrollTop =
+					this.mainScrollPos.parent;
+			}
 		});
 		header.createEl("span", {
 			text: "Quick prompts",

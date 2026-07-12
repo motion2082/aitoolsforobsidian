@@ -1691,6 +1691,70 @@ If your plugin does not need CSS, delete this file.
 	min-width: 320px;
 }
 
+/* ===== Session Tabs ===== */
+/* Active pane is transparent to layout so the chat container keeps its
+   normal flex sizing; hidden panes stay mounted but invisible. */
+.obsidianaitools-tab-pane-active {
+	display: contents;
+}
+
+.obsidianaitools-tab-pane-hidden {
+	display: none;
+}
+
+/* Own slim row directly above the chat area (Claudian-style) */
+.obsidianaitools-tab-strip-row {
+	display: flex;
+	padding: 6px 12px 8px;
+	flex-shrink: 0;
+}
+
+.obsidianaitools-tab-strip {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+.obsidianaitools-tab-chip {
+	position: relative;
+	min-width: 26px;
+	height: 26px;
+	padding: 0 7px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background-color: var(--interactive-normal);
+	color: var(--text-normal);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	box-shadow: none !important;
+}
+
+.obsidianaitools-tab-chip:hover {
+	background-color: var(--interactive-hover);
+}
+
+.obsidianaitools-tab-chip.is-active {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+/* Busy indicator — deliberately subtle; Paul is on the fence about it */
+.obsidianaitools-tab-chip-busy {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background-color: var(--interactive-accent);
+	opacity: 0.8;
+}
+
 /* ===== Quick Prompt Chips ===== */
 .obsidianaitools-quick-prompt-strip {
 	display: flex;
@@ -1701,10 +1765,13 @@ If your plugin does not need CSS, delete this file.
 
 .obsidianaitools-quick-prompt-chip {
 	padding: 2px 10px;
-	border: 1px solid var(--background-modifier-border);
+	border: none;
 	border-radius: var(--radius-l);
-	background-color: var(--background-modifier-hover);
-	color: var(--text-normal);
+	/* Paul's pick; !important because his theme styles button backgrounds
+	   with higher specificity */
+	background-color: #292a36 !important;
+	color: var(--text-muted);
+	opacity: 0.8;
 	font-size: var(--font-ui-smaller);
 	cursor: pointer;
 	white-space: nowrap;
@@ -1715,9 +1782,13 @@ If your plugin does not need CSS, delete this file.
 }
 
 .obsidianaitools-quick-prompt-chip:hover {
-	color: var(--text-muted);
-	background-color: var(--background-secondary);
-	border-color: var(--interactive-accent);
+	opacity: 1;
+	color: var(--text-normal);
+}
+
+/* Auto-mention badge: rounded pill, Claudian-style */
+.obsidianaitools-mention-badge {
+	border-radius: var(--radius-l);
 }
 
 /* ===== Queued Message Strip ===== */
@@ -1756,7 +1827,7 @@ If your plugin does not need CSS, delete this file.
 	padding: 0;
 	border: none;
 	border-radius: 50%;
-	background-color: var(--background-modifier-hover);
+	background-color: var(--interactive-hover);
 	color: var(--text-normal);
 	cursor: pointer;
 	display: flex;
@@ -1766,8 +1837,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .obsidianaitools-queued-chip-remove:hover {
-	color: var(--text-muted);
-	background-color: transparent;
+	background-color: var(--interactive-normal);
 }
 
 /* ===== Message Image (in chat history) ===== */

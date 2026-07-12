@@ -926,6 +926,22 @@ export function ChatInput({
 		(qp) => qp.name.trim().length > 0 && qp.prompt.trim().length > 0,
 	);
 
+	// Cap the chip row; the rest stay reachable via the `!` menu
+	const MAX_VISIBLE_QUICK_PROMPTS = 6;
+	const visibleQuickPrompts = firableQuickPrompts.slice(
+		0,
+		MAX_VISIBLE_QUICK_PROMPTS,
+	);
+	const overflowPromptCount =
+		firableQuickPrompts.length - visibleQuickPrompts.length;
+
+	/** Open the `!` menu pre-seeded so overflow prompts are one click away */
+	const openQuickPromptMenu = useCallback(() => {
+		setInputValue("!");
+		quickPromptMenu.updateSuggestions("!", 1);
+		window.setTimeout(() => textareaRef.current?.focus(), 0);
+	}, [quickPromptMenu]);
+
 	// Placeholder text
 	const placeholder = `Message ${agentLabel} - @ to mention notes${availableCommands.length > 0 ? ", / for commands" : ""}${firableQuickPrompts.length > 0 ? ", ! for prompts" : ""}`;
 
@@ -934,7 +950,7 @@ export function ChatInput({
 			{/* Quick Prompt Chips */}
 			{firableQuickPrompts.length > 0 && (
 				<div className="obsidianaitools-quick-prompt-strip">
-					{firableQuickPrompts.map((qp) => (
+					{visibleQuickPrompts.map((qp) => (
 						<button
 							key={qp.id}
 							className="obsidianaitools-quick-prompt-chip"
@@ -944,6 +960,15 @@ export function ChatInput({
 							{qp.name}
 						</button>
 					))}
+					{overflowPromptCount > 0 && (
+						<button
+							className="obsidianaitools-quick-prompt-chip"
+							title="Show all quick prompts"
+							onClick={openQuickPromptMenu}
+						>
+							+{overflowPromptCount} more
+						</button>
+					)}
 				</div>
 			)}
 

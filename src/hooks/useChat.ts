@@ -84,13 +84,6 @@ export interface UseChatReturn {
 	 */
 	removeQueuedMessage: (id: string) => void;
 
-	/**
-	 * Skip the queue flush for the turn that is about to settle.
-	 * Used on stop: the queue is kept (chips stay, nothing is lost) but
-	 * nothing auto-sends off the back of an explicit cancel — it resumes
-	 * after the next sent message completes.
-	 */
-	suspendQueueFlush: () => void;
 
 	/**
 	 * Send a message to the agent.
@@ -281,9 +274,6 @@ export function useChat(
 	const queuedRef = useRef<QueuedMessage[]>([]);
 	const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
 
-	// When true, the next turn settlement does not flush the queue (set by
-	// stop so an explicit cancel never auto-sends the next queued message)
-	const suspendQueueFlushRef = useRef(false);
 
 	// Latest sendMessage, so the queue flush (which runs inside sendMessage)
 	// and queueMessage's send-now fallback can call it without a stale closure
@@ -606,12 +596,6 @@ export function useChat(
 		setQueuedMessages(queuedRef.current);
 	}, []);
 
-	/**
-	 * Skip the queue flush for the turn that is about to settle (stop).
-	 */
-	const suspendQueueFlush = useCallback((): void => {
-		suspendQueueFlushRef.current = true;
-	}, []);
 
 	/**
 	 * Set initial messages from loaded session history.
@@ -816,13 +800,12 @@ export function useChat(
 				if (inFlightSendRef.current === sendOp) {
 					inFlightSendRef.current = null;
 
-					// Turn settled: flush the next queued message, unless
-					// this settlement came from an explicit stop (the queue
-					// is kept and resumes after the next sent message)
-					const suspended = suspendQueueFlushRef.current;
-					suspendQueueFlushRef.current = false;
+					// Turn settled (completed, errored, or stopped): flush
+					// the next queued message. Stop deliberately lets the
+					// queue proceed — × on a chip is how queued items are
+					// cancelled (Paul's call).
 					const next = queuedRef.current[0];
-					if (next && !suspended) {
+					if (next) {
 						queuedRef.current = queuedRef.current.slice(1);
 						setQueuedMessages(queuedRef.current);
 						void sendMessageRef.current?.(
@@ -857,7 +840,6 @@ export function useChat(
 		queuedMessages,
 		queueMessage,
 		removeQueuedMessage,
-		suspendQueueFlush,
 		sendMessage,
 		clearMessages,
 		setInitialMessages,

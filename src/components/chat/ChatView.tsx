@@ -7,7 +7,7 @@ import type AgentClientPlugin from "../../plugin";
 
 // Component imports
 import { ErrorBoundary } from "../ErrorBoundary";
-import { ChatHeader } from "./ChatHeader";
+import { ChatHeader, TabStrip, type TabStripState } from "./ChatHeader";
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
 import { AgentUpdateBanner } from "./AgentUpdateBanner";
@@ -24,6 +24,7 @@ import { ChatExporter } from "../../shared/chat-exporter";
 
 // Adapter imports
 import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { AcpAdapter } from "../../adapters/acp/acp.adapter";
 import { ObsidianVaultAdapter } from "../../adapters/obsidian/vault.adapter";
 
 // Hooks imports
@@ -61,9 +62,18 @@ export const VIEW_TYPE_CHAT = "obsidianaitools-chat-view";
 function ChatComponent({
 	plugin,
 	view,
+	isActiveTab = true,
+	tabStrip,
+	onBusyChange,
 }: {
 	plugin: AgentClientPlugin;
 	view: ChatView;
+	/** Whether this instance is the visible tab (gates global events) */
+	isActiveTab?: boolean;
+	/** Session tab strip rendered in the header */
+	tabStrip?: TabStripState;
+	/** Reports this tab's busy state up to the tab container */
+	onBusyChange?: (busy: boolean) => void;
 }) {
 	// ============================================================
 	// Platform Check
@@ -96,8 +106,26 @@ function ChatComponent({
 		};
 	}, [noteMentionService]);
 
-	const acpAdapter = useMemo(() => plugin.getOrCreateAdapter(), [plugin]);
+	// Each instance (tab) owns its own adapter — its own agent process and
+	// connection — so parallel tabs never share a session-update callback.
+	// useRef, not useMemo: adapter creation has side effects (registry) and
+	// must run exactly once per mounted instance.
+	const acpAdapterRef = useRef<AcpAdapter | null>(null);
+	if (!acpAdapterRef.current) {
+		acpAdapterRef.current = plugin.createAdapter();
+	}
+	const acpAdapter = acpAdapterRef.current;
 	const acpClientRef = useRef<IAcpClient>(acpAdapter);
+
+	// Release + disconnect this tab's adapter when the instance unmounts
+	// (tab closed or view closed); closeSession cleanup also disconnects,
+	// but this guarantees the process dies and the registry stays accurate.
+	useEffect(() => {
+		return () => {
+			plugin.releaseAdapter(acpAdapter);
+			void acpAdapter.disconnect();
+		};
+	}, [plugin, acpAdapter]);
 
 	const vaultAccessAdapter = useMemo(() => {
 		return new ObsidianVaultAdapter(plugin, noteMentionService);
@@ -137,6 +165,11 @@ function ChatComponent({
 	);
 
 	const { messages, isSending, streamingPhase } = chat;
+
+	// Report busy state to the tab container (busy dot on the tab chip)
+	useEffect(() => {
+		onBusyChange?.(isSending);
+	}, [isSending, onBusyChange]);
 
 	const permission = usePermission(acpAdapter, messages);
 
@@ -565,10 +598,9 @@ function ChatComponent({
 
 	const handleStopGeneration = useCallback(async () => {
 		logger.log("Cancelling current operation...");
-		// Keep the queue on stop (chips stay, nothing is lost) but make
-		// sure the cancelled turn's settlement doesn't auto-send the next
-		// queued message — it resumes after the next sent message instead.
-		chat.suspendQueueFlush();
+		// Stop kills only the current response — a queued message then
+		// proceeds naturally when the cancelled turn settles (× on a chip
+		// is the gesture for cancelling queued items).
 		// Save last user message before cancel (to restore it)
 		const lastMessage = chat.lastUserMessage;
 		await agentSession.cancelOperation();
@@ -576,7 +608,7 @@ function ChatComponent({
 		if (lastMessage) {
 			setRestoredMessage(lastMessage);
 		}
-	}, [logger, agentSession, chat.suspendQueueFlush, chat.lastUserMessage]);
+	}, [logger, agentSession, chat.lastUserMessage]);
 
 	const handleSendMessageFromPermission = useCallback(
 		async (content: string) => {
@@ -957,6 +989,8 @@ function ChatComponent({
 		const eventRef = workspace.on(
 			"obsidianaitools:toggle-auto-mention" as "quit",
 			() => {
+				// Global command — only the visible tab should react
+				if (!isActiveTab) return;
 				autoMention.toggle();
 			},
 		);
@@ -964,7 +998,7 @@ function ChatComponent({
 		return () => {
 			workspace.offref(eventRef);
 		};
-	}, [plugin.app.workspace, autoMention.toggle]);
+	}, [plugin.app.workspace, autoMention.toggle, isActiveTab]);
 
 	// Handle new chat request from plugin commands (e.g., "New chat with [Agent]")
 	useEffect(() => {
@@ -979,13 +1013,14 @@ function ChatComponent({
 				) => ReturnType<typeof workspace.on>;
 			}
 		).on("obsidianaitools:new-chat-requested", (agentId?: string) => {
+			if (!isActiveTab) return;
 			void handleNewChat(agentId);
 		});
 
 		return () => {
 			workspace.offref(eventRef);
 		};
-	}, [plugin.app.workspace, handleNewChat]);
+	}, [plugin.app.workspace, handleNewChat, isActiveTab]);
 
 	useEffect(() => {
 		const workspace = plugin.app.workspace;
@@ -993,6 +1028,7 @@ function ChatComponent({
 		const approveRef = workspace.on(
 			"obsidianaitools:approve-active-permission" as "quit",
 			() => {
+				if (!isActiveTab) return;
 				void (async () => {
 					const success = await permission.approveActivePermission();
 					if (!success) {
@@ -1007,6 +1043,7 @@ function ChatComponent({
 		const rejectRef = workspace.on(
 			"obsidianaitools:reject-active-permission" as "quit",
 			() => {
+				if (!isActiveTab) return;
 				void (async () => {
 					const success = await permission.rejectActivePermission();
 					if (!success) {
@@ -1021,6 +1058,7 @@ function ChatComponent({
 		const cancelRef = workspace.on(
 			"obsidianaitools:cancel-message" as "quit",
 			() => {
+				if (!isActiveTab) return;
 				void handleStopGeneration();
 			},
 		);
@@ -1035,6 +1073,7 @@ function ChatComponent({
 		permission.approveActivePermission,
 		permission.rejectActivePermission,
 		handleStopGeneration,
+		isActiveTab,
 	]);
 
 	// ============================================================
@@ -1051,6 +1090,13 @@ function ChatComponent({
 				onOpenSettings={handleOpenSettings}
 				onOpenHistory={handleOpenHistory}
 			/>
+
+			{/* Session tabs — near the chat area, Claudian-style */}
+			{tabStrip && (
+				<div className="obsidianaitools-tab-strip-row">
+					<TabStrip strip={tabStrip} />
+				</div>
+			)}
 
 			{agentUpdate && (
 				<AgentUpdateBanner
@@ -1151,6 +1197,109 @@ function ChatComponent({
 	);
 }
 
+/** Maximum parallel session tabs (each is a live agent process) */
+const MAX_TABS = 4;
+
+/**
+ * Container that renders one ChatComponent instance per session tab and
+ * toggles visibility with CSS. Instances stay mounted while their tab is
+ * open, so each keeps its own agent process, transcript, queue, and
+ * streaming state; the strip in the header is just "which one is visible".
+ */
+function TabbedChat({
+	plugin,
+	view,
+}: {
+	plugin: AgentClientPlugin;
+	view: ChatView;
+}) {
+	const initialTabRef = useRef<{ id: string }>({ id: crypto.randomUUID() });
+	const [tabs, setTabs] = useState<{ id: string }[]>([
+		initialTabRef.current,
+	]);
+	const [activeTabId, setActiveTabId] = useState<string>(
+		initialTabRef.current.id,
+	);
+	const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
+
+	const handleSelectTab = useCallback((id: string) => {
+		setActiveTabId(id);
+	}, []);
+
+	const handleNewTab = useCallback(() => {
+		if (tabs.length >= MAX_TABS) return;
+		const tab = { id: crypto.randomUUID() };
+		setTabs([...tabs, tab]);
+		setActiveTabId(tab.id);
+	}, [tabs]);
+
+	const handleCloseTab = useCallback(
+		(id: string) => {
+			// The sole remaining session can't be closed — use New Chat to
+			// reset it instead (avoids a pointless teardown/respawn cycle)
+			if (tabs.length <= 1) return;
+			const index = tabs.findIndex((t) => t.id === id);
+			if (index === -1) return;
+			const next = tabs.filter((t) => t.id !== id);
+			setTabs(next);
+			if (activeTabId === id) {
+				const neighbor = next[Math.min(index, next.length - 1)];
+				setActiveTabId(neighbor.id);
+			}
+			setBusyMap((prev) => {
+				const copy = { ...prev };
+				delete copy[id];
+				return copy;
+			});
+		},
+		[tabs, activeTabId],
+	);
+
+	const handleBusyChange = useCallback((id: string, busy: boolean) => {
+		setBusyMap((prev) =>
+			prev[id] === busy ? prev : { ...prev, [id]: busy },
+		);
+	}, []);
+
+	const tabStrip: TabStripState = {
+		tabs: tabs.map((tab, index) => ({
+			id: tab.id,
+			number: index + 1,
+			busy: !!busyMap[tab.id],
+		})),
+		activeTabId,
+		canAddTab: tabs.length < MAX_TABS,
+		onSelectTab: handleSelectTab,
+		onNewTab: handleNewTab,
+		onCloseTab: handleCloseTab,
+	};
+
+	return (
+		<>
+			{tabs.map((tab) => (
+				<div
+					key={tab.id}
+					className={
+						tab.id === activeTabId
+							? "obsidianaitools-tab-pane-active"
+							: "obsidianaitools-tab-pane-hidden"
+					}
+				>
+					<ChatComponent
+						plugin={plugin}
+						view={view}
+						isActiveTab={tab.id === activeTabId}
+						tabStrip={tabStrip}
+						onBusyChange={(busy) =>
+							handleBusyChange(tab.id, busy)
+						}
+					/>
+				</div>
+			))}
+		</>
+	);
+}
+
 export class ChatView extends ItemView {
 	private root: Root | null = null;
 	private plugin: AgentClientPlugin;
@@ -1182,7 +1331,7 @@ export class ChatView extends ItemView {
 			this.root = createRoot(container);
 			this.root.render(
 				<ErrorBoundary>
-					<ChatComponent plugin={this.plugin} view={this} />
+					<TabbedChat plugin={this.plugin} view={this} />
 				</ErrorBoundary>,
 			);
 		} catch (error) {
