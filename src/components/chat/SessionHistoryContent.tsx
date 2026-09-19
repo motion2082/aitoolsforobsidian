@@ -1,6 +1,6 @@
 import * as React from "react";
 const { useState, useCallback } = React;
-import { setIcon } from "obsidian";
+import { setIcon, setTooltip } from "obsidian";
 import type { SessionInfo } from "../../domain/models/session-info";
 
 /**
@@ -52,16 +52,29 @@ export interface SessionHistoryContentProps {
 }
 
 /**
+ * Hover text for the row actions. "Restore" and "Fork" mean nothing on
+ * their own, so each says what it does to the conversation.
+ */
+const RESTORE_HINT =
+	"Restore: carry on this conversation where you left off. The agent still remembers it, and new messages continue the same thread.";
+const FORK_HINT =
+	"Fork: start a new conversation from a copy of this one. The original is left untouched, so you can try a different direction.";
+const DELETE_HINT = "Delete: remove this session from the history.";
+
+/**
  * Icon button component using Obsidian's setIcon.
  */
 function IconButton({
 	iconName,
 	label,
+	tooltip,
 	className,
 	onClick,
 }: {
 	iconName: string;
 	label: string;
+	/** Hover text explaining what the action does (defaults to label) */
+	tooltip?: string;
 	className: string;
 	onClick: () => void;
 }) {
@@ -73,6 +86,12 @@ function IconButton({
 		}
 	}, [iconName]);
 
+	React.useEffect(() => {
+		if (iconRef.current) {
+			setTooltip(iconRef.current, tooltip ?? label);
+		}
+	}, [tooltip, label]);
+
 	return (
 		<div
 			ref={iconRef}
@@ -80,6 +99,43 @@ function IconButton({
 			aria-label={label}
 			onClick={onClick}
 		/>
+	);
+}
+
+/**
+ * Button with hover text, used where a bare verb needs explaining.
+ */
+function LabelledButton({
+	text,
+	tooltip,
+	className,
+	disabled,
+	onClick,
+}: {
+	text: string;
+	tooltip: string;
+	className: string;
+	disabled?: boolean;
+	onClick: () => void;
+}) {
+	const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+	React.useEffect(() => {
+		if (buttonRef.current) {
+			setTooltip(buttonRef.current, tooltip);
+		}
+	}, [tooltip]);
+
+	return (
+		<button
+			ref={buttonRef}
+			className={className}
+			aria-label={tooltip}
+			disabled={disabled}
+			onClick={onClick}
+		>
+			{text}
+		</button>
 	);
 }
 
@@ -184,19 +240,24 @@ function DebugForm({
 			</div>
 
 			<div className="obsidianaitools-session-history-debug-actions">
-				<button
+				<LabelledButton
+					text="Restore"
+					tooltip={RESTORE_HINT}
 					className="obsidianaitools-session-history-debug-button"
 					onClick={handleRestore}
-				>
-					Restore
-				</button>
-				<button
+				/>
+				<LabelledButton
+					text="Fork"
+					tooltip={FORK_HINT}
 					className="obsidianaitools-session-history-debug-button"
 					onClick={handleFork}
-				>
-					Fork
-				</button>
+				/>
 			</div>
+
+			<p className="obsidianaitools-session-history-debug-hint">
+				Restore continues that session. Fork copies it into a new one
+				and leaves the original alone.
+			</p>
 
 			<hr className="obsidianaitools-session-history-debug-separator" />
 		</div>
@@ -259,6 +320,7 @@ function SessionItem({
 					<IconButton
 						iconName="play"
 						label="Restore session"
+						tooltip={RESTORE_HINT}
 						className="obsidianaitools-session-history-action-icon obsidianaitools-session-history-restore-icon"
 						onClick={handleRestore}
 					/>
@@ -266,7 +328,8 @@ function SessionItem({
 				{canFork && (
 					<IconButton
 						iconName="copy"
-						label="Duplicate session"
+						label="Fork session"
+						tooltip={FORK_HINT}
 						className="obsidianaitools-session-history-action-icon obsidianaitools-session-history-fork-icon"
 						onClick={handleFork}
 					/>
@@ -274,6 +337,7 @@ function SessionItem({
 				<IconButton
 					iconName="trash-2"
 					label="Delete session"
+					tooltip={DELETE_HINT}
 					className="obsidianaitools-session-history-action-icon obsidianaitools-session-history-delete-icon"
 					onClick={handleDelete}
 				/>
@@ -408,14 +472,13 @@ export function SessionHistoryContent({
 							)}
 
 							{sessions.length > 0 && (
-								<button
+								<LabelledButton
+									text="Delete all"
+									tooltip="Delete every session listed here. Sessions open in a chat tab are kept."
 									className="obsidianaitools-session-history-delete-all-button"
 									disabled={loading}
-									aria-label="Delete all listed sessions"
 									onClick={onDeleteAllSessions}
-								>
-									Delete all
-								</button>
+								/>
 							)}
 						</div>
 					)}
