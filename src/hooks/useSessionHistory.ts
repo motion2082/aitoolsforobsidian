@@ -138,6 +138,13 @@ export interface UseSessionHistoryReturn {
 	deleteSession: (sessionId: string) => Promise<void>;
 
 	/**
+	 * Delete every session currently listed (local metadata + message files).
+	 * Respects the active filter: only the sessions shown are removed.
+	 * @returns Number of sessions deleted
+	 */
+	deleteAllSessions: () => Promise<number>;
+
+	/**
 	 * Save session metadata locally.
 	 * Called when the first message is sent in a new session.
 	 * @param sessionId - Session ID to save
@@ -584,6 +591,40 @@ export function useSessionHistory(
 	);
 
 	/**
+	 * Delete every session currently listed.
+	 *
+	 * Only the sessions visible in the list are removed, so the current
+	 * filter (e.g. "current vault only") is respected. Metadata is cleared in
+	 * a single settings write and each message file is removed.
+	 */
+	const deleteAllSessions = useCallback(async (): Promise<number> => {
+		const targets = sessions.map((s) => s.sessionId);
+		if (targets.length === 0) {
+			return 0;
+		}
+
+		try {
+			await settingsAccess.deleteSessions(targets);
+
+			// Remove from local state
+			const deleted = new Set(targets);
+			setSessions((prev) =>
+				prev.filter((s) => !deleted.has(s.sessionId)),
+			);
+
+			// Invalidate cache to ensure consistency
+			invalidateCache();
+
+			return targets.length;
+		} catch (err) {
+			const errorMessage =
+				err instanceof Error ? err.message : String(err);
+			setError(`Failed to delete sessions: ${errorMessage}`);
+			throw err; // Re-throw to allow caller to handle
+		}
+	}, [sessions, settingsAccess, invalidateCache]);
+
+	/**
 	 * Save session metadata locally.
 	 * Called when the first message is sent in a new session.
 	 */
@@ -654,6 +695,7 @@ export function useSessionHistory(
 		restoreSession,
 		forkSession,
 		deleteSession,
+		deleteAllSessions,
 		saveSessionLocally,
 		saveSessionMessages,
 		invalidateCache,

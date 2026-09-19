@@ -23,6 +23,7 @@ Depending on the agent's capabilities, you can perform the following actions:
 | **Restore** | Resume the session where you left off |
 | **Fork** | Create a new branch from that point in the conversation |
 | **Delete** | Remove the session from history |
+| **Delete all** | Remove every session shown in the list |
 
 ::: tip
 Not all actions are available for every agent. The modal shows only the actions supported by your current agent.
@@ -70,6 +71,13 @@ To delete a session:
 
 1. Click the **Delete** button (trash icon) on the session
 2. Confirm the deletion in the dialog
+
+To clear the whole list:
+
+1. Click **Delete all** at the top right of the modal
+2. Confirm in the dialog, which tells you how many sessions will go
+
+Only the sessions currently shown are deleted. If **Show current vault only** is ticked, sessions from your other vaults are left alone.
 
 ::: warning
 Deletion removes the session from the plugin's local storage only. The session still exists on the agent side.

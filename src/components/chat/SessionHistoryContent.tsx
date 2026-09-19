@@ -41,6 +41,8 @@ export interface SessionHistoryContentProps {
 	onForkSession: (sessionId: string, cwd: string) => Promise<void>;
 	/** Callback when a session is deleted (shows confirmation dialog) */
 	onDeleteSession: (sessionId: string) => void;
+	/** Callback when every listed session is deleted (shows confirmation dialog) */
+	onDeleteAllSessions: () => void;
 	/** Callback to load more sessions (pagination) */
 	onLoadMore: () => void;
 	/** Callback to fetch sessions with filter */
@@ -305,6 +307,7 @@ export function SessionHistoryContent({
 	onRestoreSession,
 	onForkSession,
 	onDeleteSession,
+	onDeleteAllSessions,
 	onLoadMore,
 	onFetchSessions,
 	onClose,
@@ -337,6 +340,9 @@ export function SessionHistoryContent({
 
 	// Check if any session operation is available
 	const canPerformAnyOperation = canRestore || canFork;
+
+	// Vault filter only applies to the agent's own session/list
+	const showFilter = canList && !isUsingLocalSessions;
 
 	// Show local sessions list (always show for delete functionality)
 	// - If agent supports list: use agent's session/list
@@ -385,17 +391,32 @@ export function SessionHistoryContent({
 
 			{canShowList && (
 				<>
-					{/* Filter toggle - only for agent session/list */}
-					{canList && !isUsingLocalSessions && (
-						<div className="obsidianaitools-session-history-filter">
-							<label className="obsidianaitools-session-history-filter-label">
-								<input
-									type="checkbox"
-									checked={filterByCurrentVault}
-									onChange={handleFilterChange}
-								/>
-								<span>Show current vault only</span>
-							</label>
+					{/* Toolbar: vault filter (agent session/list only) + delete all */}
+					{(showFilter || sessions.length > 0) && (
+						<div className="obsidianaitools-session-history-toolbar">
+							{showFilter ? (
+								<label className="obsidianaitools-session-history-filter-label">
+									<input
+										type="checkbox"
+										checked={filterByCurrentVault}
+										onChange={handleFilterChange}
+									/>
+									<span>Show current vault only</span>
+								</label>
+							) : (
+								<span />
+							)}
+
+							{sessions.length > 0 && (
+								<button
+									className="obsidianaitools-session-history-delete-all-button"
+									disabled={loading}
+									aria-label="Delete all listed sessions"
+									onClick={onDeleteAllSessions}
+								>
+									Delete all
+								</button>
+							)}
 						</div>
 					)}
 
