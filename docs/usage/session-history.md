@@ -77,10 +77,10 @@ To clear the whole list:
 1. Click **Delete all** at the top right of the modal
 2. Confirm in the dialog, which tells you how many sessions will go
 
-Only the sessions currently shown are deleted. If **Show current vault only** is ticked, sessions from your other vaults are left alone.
+Only the sessions currently shown are deleted. If **Show current vault only** is ticked, sessions from your other vaults are left alone. Sessions open in a chat tab are also kept, so deleting does not interrupt a conversation you are in the middle of.
 
 ::: warning
-Deletion removes the session from the plugin's local storage only. The session still exists on the agent side.
+If your agent supports session deletion (Claude Agent does), the session is deleted on the agent too, transcript included. Agents without it keep their own copy, so those sessions reappear in the list on the next refresh.
 :::
 
 ## Troubleshooting

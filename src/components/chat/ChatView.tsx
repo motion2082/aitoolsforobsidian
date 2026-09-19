@@ -238,6 +238,17 @@ function ChatComponent({
 		setIsLoadingSessionHistory(false);
 	}, [logger]);
 
+	// Report this tab's open session to the plugin, so deleting sessions never
+	// tears down one that another tab is using
+	useEffect(() => {
+		plugin.setLiveSessionId(acpAdapter, session.sessionId ?? null);
+	}, [plugin, acpAdapter, session.sessionId]);
+
+	const isSessionLive = useCallback(
+		(sessionId: string) => plugin.getLiveSessionIds().has(sessionId),
+		[plugin],
+	);
+
 	const sessionHistory = useSessionHistory({
 		agentClient: acpAdapter,
 		session,
@@ -247,6 +258,7 @@ function ChatComponent({
 		onMessagesRestore: chat.setMessagesFromLocal,
 		onLoadStart: handleLoadStart,
 		onLoadEnd: handleLoadEnd,
+		isSessionLive,
 	});
 
 	// Combined error info (session errors take precedence)
@@ -444,7 +456,11 @@ function ChatComponent({
 
 			const confirmModal = new ConfirmDeleteModal(
 				plugin.app,
-				ConfirmDeleteModal.forSession(sessionTitle),
+				ConfirmDeleteModal.forSession(
+					sessionTitle,
+					sessionHistory.canDeleteOnAgent &&
+						!isSessionLive(sessionId),
+				),
 				async () => {
 					try {
 						logger.log(`[ChatView] Deleting session: ${sessionId}`);
@@ -458,22 +474,39 @@ function ChatComponent({
 			);
 			confirmModal.open();
 		},
-		[plugin.app, sessionHistory, logger],
+		[plugin.app, sessionHistory, isSessionLive, logger],
 	);
 
 	const handleHistoryDeleteAllSessions = useCallback(() => {
-		const count = sessionHistory.sessions.length;
-		if (count === 0) return;
+		const listed = sessionHistory.sessions.map((s) => s.sessionId);
+		const deletable = listed.filter((id) => !isSessionLive(id));
+		const openCount = listed.length - deletable.length;
+
+		if (deletable.length === 0) {
+			new Notice(
+				"[AI Tools] Only sessions that are open right now are listed",
+			);
+			return;
+		}
 
 		const confirmModal = new ConfirmDeleteModal(
 			plugin.app,
-			ConfirmDeleteModal.forAllSessions(count),
+			ConfirmDeleteModal.forAllSessions(
+				deletable.length,
+				openCount,
+				sessionHistory.canDeleteOnAgent,
+			),
 			async () => {
 				try {
-					logger.log(`[ChatView] Deleting all ${count} sessions`);
-					const deleted = await sessionHistory.deleteAllSessions();
+					logger.log(
+						`[ChatView] Deleting ${deletable.length} sessions`,
+					);
+					const result = await sessionHistory.deleteAllSessions();
+					const plural = result.deleted === 1 ? "" : "s";
 					new Notice(
-						`[AI Tools] Deleted ${deleted} session${deleted === 1 ? "" : "s"}`,
+						result.failed > 0
+							? `[AI Tools] Deleted ${result.deleted} session${plural}, ${result.failed} could not be deleted`
+							: `[AI Tools] Deleted ${result.deleted} session${plural}`,
 					);
 				} catch (error) {
 					new Notice("[AI Tools] Failed to delete sessions");
@@ -482,7 +515,7 @@ function ChatComponent({
 			},
 		);
 		confirmModal.open();
-	}, [plugin.app, sessionHistory, logger]);
+	}, [plugin.app, sessionHistory, isSessionLive, logger]);
 
 	const handleHistoryLoadMore = useCallback(() => {
 		void sessionHistory.loadMoreSessions();

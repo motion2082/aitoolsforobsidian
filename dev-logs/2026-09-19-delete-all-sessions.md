@@ -78,15 +78,64 @@ compatibility shim.
 
 ---
 
-### Known edge
+### Change 5: `session/delete` wired up — the actual bug
 
-Deleting all while a chat is open also deletes the open session's row and
-message file. The chat keeps working — the agent-side session is
-untouched — and the next turn writes a fresh message file, but the
-metadata row does not come back until a new session starts. The existing
-"repair session metadata" command rebuilds rows from orphaned files if
-needed. Same behaviour as deleting the open session by its own trash
-icon today, so it was left as is.
+**Status**: ✅ Done (pending Paul's in-Obsidian test)
+
+First test: the sessions looked deleted, then came back. Cause found —
+**deletion was never agent-side**. When the agent supports `session/list`
+(Claude does), the modal lists the *agent's* sessions, while
+`deleteSession` only dropped the plugin's own metadata and message file.
+The next fetch rebuilt the list from the agent, so every row returned.
+This affected the per-row trash icon just as much as the new button; the
+bulk delete only made it obvious.
+
+ACP has had `session/delete` (`unstable_deleteSession`, capability
+`sessionCapabilities.delete`) and `claude-agent-acp` 0.79.0 implements it
+— it tears down the in-memory session and deletes the transcript through
+the Claude Agent SDK. The plugin simply never called it.
+
+- `src/domain/ports/agent-client.port.ts` — `SessionCapabilities.delete`,
+  and `IAgentClient.deleteSession(sessionId)`.
+- `src/shared/session-capability-utils.ts` — `canDelete` flag.
+- `src/adapters/acp/acp.adapter.ts` — `deleteSession()` calls
+  `unstable_deleteSession({ sessionId })`.
+- `src/hooks/useSessionHistory.ts` — both delete paths call the agent
+  first when `canDelete`, then clear the local copy. Exposes
+  `canDeleteOnAgent`.
+
+Failure handling: the plugin's own copy is always removed, because that
+is what the user asked for, and an agent refusal is reported instead of
+swallowed — bulk delete returns `{ deleted, failed, skipped }` and the
+Notice names the failures. A session the agent kept simply reappears on
+the next fetch, which is now the honest outcome rather than the default
+one.
+
+### Change 6: Live sessions are never deleted on the agent
+
+**Status**: ✅ Done (pending Paul's in-Obsidian test)
+
+`session/delete` tears down a running session, so deleting the session a
+tab has open would break that tab — and with the tab strip, bulk delete
+would have broken *every* open tab at once.
+
+- `src/plugin.ts` — `liveSessionIds: Map<AcpAdapter, string>` with
+  `setLiveSessionId()` / `getLiveSessionIds()`, cleared in
+  `releaseAdapter()`. The adapter registry already existed; this hangs
+  the tab's current session ID off it.
+- `src/components/chat/ChatView.tsx` — an effect registers
+  `session.sessionId` on every change, and `isSessionLive` is passed into
+  the hook.
+- `useSessionHistory` — bulk delete skips live sessions entirely (row and
+  chat both kept); per-row delete of a live session still clears the
+  plugin's copy but leaves the agent's, as it did before.
+- The dialog says how many open sessions are being kept, and
+  "Delete all" with nothing but open sessions listed shows a Notice
+  instead of a dialog.
+
+Dialog wording now varies: "removes the session from the agent as well,
+including its transcript on disk" when the agent can delete, the old
+plugin-only note (plus "it may reappear in the list") when it cannot.
 
 ---
 
@@ -94,15 +143,18 @@ icon today, so it was left as is.
 
 1. Open history with several sessions listed. "Delete all" sits to the
    right of the filter row.
-2. Click it: dialog reads "Delete all sessions?" with the right count.
-   Cancel leaves everything in place.
-3. Confirm: list empties, "No previous sessions" shows, Notice reports
-   the count. Reopen history — still empty. Restart Obsidian — still
-   empty (settings write persisted).
-4. Check `.obsidian/plugins/obsidianaitools/sessions/` — the `.json`
-   files for those sessions are gone.
-5. With Claude (agent `session/list`): untick "Show current vault only",
-   confirm the button deletes everything then listed; tick it and confirm
-   it only takes this vault's.
-6. Single-row trash icon still works and still says "Delete session?".
-7. Empty list: no button rendered.
+2. Click it: dialog reads "Delete all sessions?" with the right count,
+   and says the open session is kept. Cancel leaves everything in place.
+3. Confirm: list empties except the open session, Notice reports the
+   count. **Reopen history — the rows must stay gone.** This is the case
+   that failed before.
+4. Restart Obsidian, open history: still gone.
+5. Check `~/.claude/` session storage and
+   `.obsidian/plugins/obsidianaitools/sessions/` — transcripts for the
+   deleted sessions are gone from both.
+6. Keep chatting in the open tab after a delete-all: the session must
+   still work (it was skipped).
+7. Two tabs open: delete-all from tab A must not break tab B.
+8. Single-row trash icon on a non-open session: also stays gone now.
+9. Gemini/Codex: if the agent does not advertise `delete`, the dialog
+   says the copy stays on the agent side and nothing is sent.

@@ -2210,4 +2210,32 @@ To fix:
 			throw error;
 		}
 	}
+
+	/**
+	 * Delete a session on the agent side (unstable).
+	 *
+	 * Removes the session from the agent's own store so it stops appearing in
+	 * session/list. Without this the plugin can only forget its own copy and
+	 * the session reappears on the next fetch.
+	 *
+	 * @param sessionId - Session to delete
+	 */
+	async deleteSession(sessionId: string): Promise<void> {
+		if (!this.connection) {
+			throw new Error(
+				"ACP connection not initialized. Call initialize() first.",
+			);
+		}
+
+		try {
+			this.logger.log(`[AcpAdapter] Deleting session: ${sessionId}...`);
+
+			await this.connection.unstable_deleteSession({ sessionId });
+
+			this.logger.log(`[AcpAdapter] Session deleted: ${sessionId}`);
+		} catch (error) {
+			this.logger.error("[AcpAdapter] Delete Session Error:", error);
+			throw error;
+		}
+	}
 }
