@@ -137,6 +137,29 @@ Dialog wording now varies: "removes the session from the agent as well,
 including its transcript on disk" when the agent can delete, the old
 plugin-only note (plus "it may reappear in the list") when it cannot.
 
+### Change 7: The capability was being thrown away
+
+**Status**: ✅ Done (pending Paul's in-Obsidian test)
+
+Second test: the confirm dialog still read "This only removes the session
+from this plugin", i.e. `canDeleteOnAgent` was false even though the
+agent advertises `delete: {}`.
+
+`AcpAdapter.initialize()` rebuilds `sessionCapabilities` field by field
+rather than passing the object through, and it listed only `resume`,
+`fork` and `list`. `delete` was dropped at the door, so adding it to the
+port type in Change 5 changed nothing at runtime. Now carried through,
+along with the two inline capability shapes it passes on the way to
+session state (`chat-session.ts`, `useAgentSession.ts`).
+
+Worth remembering: any new agent capability needs adding in **four**
+places — the port type, the adapter's copy in `initialize()`, and the two
+inline shapes.
+
+Bulk delete now also sets `loading` while it runs. It makes one agent
+call per session, and Paul's list was 133 sessions, which is long enough
+for a second click to land on the button.
+
 ---
 
 ### Test plan

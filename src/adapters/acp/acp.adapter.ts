@@ -758,6 +758,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 								resume: sessionCaps.resume ?? undefined,
 								fork: sessionCaps.fork ?? undefined,
 								list: sessionCaps.list ?? undefined,
+								delete: sessionCaps.delete ?? undefined,
 							}
 						: undefined,
 					mcpCapabilities: mcpCaps

@@ -675,9 +675,13 @@ export function useSessionHistory(
 				return { deleted: 0, failed: 0, skipped: skipped.length };
 			}
 
+			// One agent call per session, so a long list takes a moment.
+			// Marking the list busy also disables the button against a
+			// second click while this runs.
+			setLoading(true);
+
 			// Delete each agent-side copy. One failure must not abort the
-			// rest, so failures are collected and only the sessions the agent
-			// accepted are cleared locally.
+			// rest, so failures are collected and reported afterwards.
 			const failedIds = new Set<string>();
 			if (canDeleteOnAgent) {
 				for (const sessionId of targets) {
@@ -708,6 +712,8 @@ export function useSessionHistory(
 					err instanceof Error ? err.message : String(err);
 				setError(`Failed to delete sessions: ${errorMessage}`);
 				throw err; // Re-throw to allow caller to handle
+			} finally {
+				setLoading(false);
 			}
 
 			if (failedIds.size > 0) {
